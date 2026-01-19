@@ -1,0 +1,22 @@
+name: SoundSwap Daily Scraper
+
+on:
+  schedule:
+    - cron: '0 10 * * *' # Runs at 10 AM daily
+  workflow_dispatch: # Allows you to run it manually from the "Actions" tab
+
+jobs:
+  run-scout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Script
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: python main.py
