@@ -2,7 +2,7 @@ name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '16 23 * * *'  # Daily at 23:16 UTC (7:16 PM EST)
+    - cron: '0 9 * * *'  # Daily at 9:00 UTC
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -10,15 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.1
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.0.0
         with:
           python-version: '3.11'
 
       - name: Install Dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install requests google-search-results
 
       - name: Run Full Scout with 4 Topics
@@ -47,9 +48,9 @@ jobs:
           
           # 4 Daily Topics
           NICHE_QUERIES = [
-              'latest music production gear releases 2026',
+              'latest music production gear releases 2024',
               'breaking AI audio tools for artists', 
-              'independent music marketing trends 2026',
+              'independent music marketing trends 2024',
               'music streaming industry news today'
           ]
           
@@ -65,7 +66,8 @@ jobs:
                   })
                   timeseries = results.get('interest_over_time', {}).get('timeline_data', [])
                   return int(timeseries[-1].get('values')[0].get('value')) if timeseries else 50
-              except:
+              except Exception as e:
+                  print(f'⚠️ Trends error for {keyword}: {e}')
                   return 50
           
           def get_serp_data(query):
@@ -83,7 +85,7 @@ jobs:
                   })
                   
                   organic = results.get('organic_results', [])
-                  questions = results.get('related_questions', [])[:3]
+                  questions = results.get('related_questions', [])[:3] if results.get('related_questions') else []
                   
                   first_result = organic[0] if organic else {}
                   
@@ -98,7 +100,7 @@ jobs:
                       'status': status
                   }
               except Exception as e:
-                  print(f'Error for {query}: {e}')
+                  print(f'❌ Error for {query}: {e}')
                   return {
                       'query': query,
                       'score': 50,
@@ -130,7 +132,10 @@ jobs:
               report += f'{emoji} **{topic["query"].upper()}**\n'
               report += f'   📊 Trend: {topic["score"]}/100 {topic["status"]}\n'
               report += f'   🔗 Source: {topic["link"][:50]}...\n'
-              report += f'   ❓ PAA: {paa_preview[0][:40]}...\n\n'
+              if topic['questions']:
+                  report += f'   ❓ PAA: {paa_preview[0][:40]}...\n\n'
+              else:
+                  report += f'   ❓ PAA: No questions found\n\n'
           
           report += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
           report += '**HOW TO GENERATE YOUR BLOG:**\n'
@@ -156,8 +161,13 @@ jobs:
                   response = requests.post(url, headers=headers, json={'content': chunk})
                   if response.status_code == 200:
                       print(f'✅ Chunk {i+1}/{len(chunks)} sent')
+                  elif response.status_code == 429:
+                      print(f'⚠️ Rate limited, waiting...')
+                      import time
+                      time.sleep(2)
+                      response = requests.post(url, headers=headers, json={'content': chunk})
                   else:
-                      print(f'⚠️ Chunk {i+1} failed: {response.status_code}')
+                      print(f'⚠️ Chunk {i+1} failed: {response.status_code} - {response.text}')
               except Exception as e:
                   print(f'❌ Error sending chunk {i+1}: {e}')
           

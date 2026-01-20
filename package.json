@@ -1,0 +1,16 @@
+{
+  "name": "soundswap-trend-scout",
+  "version": "5.0.0",
+  "description": "SoundSwap AI Blog Generator - Edge Compatible",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

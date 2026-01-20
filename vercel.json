@@ -1,36 +1,39 @@
 {
   "functions": {
-    "api/index.py": {
-      "maxDuration": 300,
-      "memory": 1024
-    },
-    "api/scout.py": {
-      "maxDuration": 300,
-      "memory": 1024
-    },
-    "api/interactions.py": {
-      "maxDuration": 300,
+    "api/index.js": {
+      "maxDuration": 60,
       "memory": 1024
     }
   },
   "rewrites": [
-    { 
-      "source": "/api/interactions", 
-      "destination": "/api/interactions.py" 
-    },
-    { 
-      "source": "/api/scout", 
-      "destination": "/api/scout.py" 
-    },
-    { 
-      "source": "/(.*)", 
-      "destination": "/api/index.py" 
-    }
+    { "source": "/api/interactions", "destination": "/api/index.js" },
+    { "source": "/api/scout", "destination": "/api/index.js" },
+    { "source": "/", "destination": "/api/index.js" },
+    { "source": "/health", "destination": "/api/index.js" }
   ],
   "crons": [
     {
       "path": "/api/scout",
-      "schedule": "16 23 * * *"
+      "schedule": "0 9 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET,POST,OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Signature-Ed25519, X-Signature-Timestamp"
+        }
+      ]
     }
   ]
 }
