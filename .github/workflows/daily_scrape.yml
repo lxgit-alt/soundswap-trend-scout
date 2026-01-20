@@ -10,12 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4  # Updated to v4 (stable)
 
       - name: Setup Python
-        uses: actions/setup-python@v5.0.0
+        uses: actions/setup-python@v5  # Updated to v5 (stable)
         with:
           python-version: '3.11'
+          cache: 'pip' # Speeds up subsequent runs
 
       - name: Install Dependencies
         run: |
@@ -55,7 +56,6 @@ jobs:
           ]
           
           def get_trend_score(keyword):
-              '''Get Google Trends score.'''
               try:
                   client = Client(api_key=SERPAPI_KEY)
                   results = client.search({
@@ -71,24 +71,19 @@ jobs:
                   return 50
           
           def get_serp_data(query):
-              '''Get search results for a query.'''
               try:
                   score = get_trend_score(query)
                   client = Client(api_key=SERPAPI_KEY)
-                  
                   results = client.search({
                       'engine': 'google',
                       'q': query,
                       'tbs': 'qdr:d',
-                      'api_key': SERPAPI_KEY,
                       'num': 3
                   })
                   
                   organic = results.get('organic_results', [])
                   questions = results.get('related_questions', [])[:3] if results.get('related_questions') else []
-                  
                   first_result = organic[0] if organic else {}
-                  
                   status = '🔥 VIRAL' if score > 75 else '📈 TRENDING' if score > 50 else '📊 STEADY'
                   
                   return {
@@ -101,92 +96,34 @@ jobs:
                   }
               except Exception as e:
                   print(f'❌ Error for {query}: {e}')
-                  return {
-                      'query': query,
-                      'score': 50,
-                      'link': 'No link found',
-                      'title': '',
-                      'questions': [],
-                      'status': '📊 STEADY'
-                  }
+                  return {'query': query, 'score': 50, 'link': 'No link found', 'title': '', 'questions': [], 'status': '📊 STEADY'}
           
-          print('🚀 Starting daily blog scout...')
+          print('🚀 Starting SoundSwap daily scout...')
+          daily_topics = [get_serp_data(q) for q in NICHE_QUERIES]
           
-          # Get data for all 4 topics
-          daily_topics = []
-          for query in NICHE_QUERIES:
-              print(f'📡 Fetching: {query}')
-              topic_data = get_serp_data(query)
-              daily_topics.append(topic_data)
-          
-          # Build the daily report
-          report = f'🎸 **SOUNDSWAP DAILY BLOG TOPICS** ({datetime.now().strftime("%Y-%m-%d")})\n\n'
+          report = f'🎸 **SOUNDSWAP DAILY BLOG TOPICS** ({datetime.now().strftime(\"%Y-%m-%d\")})\n\n'
           report += '**Choose ONE topic for today\'s semantic SEO blog:**\n\n'
           
           for i, topic in enumerate(daily_topics, 1):
               emoji = ['1️⃣', '2️⃣', '3️⃣', '4️⃣'][i-1]
-              
-              # Preview PAA questions
               paa_preview = topic['questions'][:2] if topic['questions'] else ['What producers need to know']
-              
-              report += f'{emoji} **{topic["query"].upper()}**\n'
-              report += f'   📊 Trend: {topic["score"]}/100 {topic["status"]}\n'
-              report += f'   🔗 Source: {topic["link"][:50]}...\n'
-              if topic['questions']:
-                  report += f'   ❓ PAA: {paa_preview[0][:40]}...\n\n'
-              else:
-                  report += f'   ❓ PAA: No questions found\n\n'
+              report += f'{emoji} **{topic[\"query\"].upper()}**\n'
+              report += f'   📊 Trend: {topic[\"score\"]}/100 {topic[\"status\"]}\n'
+              report += f'   🔗 Source: {topic[\"link\"][:50]}...\n'
+              report += f'   ❓ PAA: {paa_preview[0][:40]}...\n\n'
           
           report += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
-          report += '**HOW TO GENERATE YOUR BLOG:**\n'
-          report += '1. Type `/blog` in this channel\n'
-          report += '2. Choose topic (1-4)\n'  
-          report += '3. Choose outline style\n'
-          report += '4. Get semantic SEO blog with PAA → H3 headers!\n\n'
-          report += '⏱️ *Only 1 blog per day for maximum SEO impact*'
+          report += '**HOW TO GENERATE YOUR BLOG:**\n1. Type `/blog` in this channel\n2. Choose topic (1-4)\n'
           
-          # Send to Discord channel using Bot token
+          # Send to Discord
           url = f'https://discord.com/api/v10/channels/{CHANNEL_ID}/messages'
-          headers = {
-              'Authorization': f'Bot {DISCORD_TOKEN}',
-              'Content-Type': 'application/json'
-          }
+          headers = {\"Authorization\": f\"Bot {DISCORD_TOKEN}\", \"Content-Type\": \"application/json\"}
+          requests.post(url, headers=headers, json={'content': report[:1900]})
           
-          # Split if too long
-          max_length = 1900
-          chunks = [report[i:i + max_length] for i in range(0, len(report), max_length)]
-          
-          for i, chunk in enumerate(chunks):
-              try:
-                  response = requests.post(url, headers=headers, json={'content': chunk})
-                  if response.status_code == 200:
-                      print(f'✅ Chunk {i+1}/{len(chunks)} sent')
-                  elif response.status_code == 429:
-                      print(f'⚠️ Rate limited, waiting...')
-                      import time
-                      time.sleep(2)
-                      response = requests.post(url, headers=headers, json={'content': chunk})
-                  else:
-                      print(f'⚠️ Chunk {i+1} failed: {response.status_code} - {response.text}')
-              except Exception as e:
-                  print(f'❌ Error sending chunk {i+1}: {e}')
-          
-          # Also send simple webhook notification if available
           if WEBHOOK:
-              webhook_msg = {
-                  'content': f'✅ **Daily Blog Scout Complete**\n📅 {datetime.now().strftime("%Y-%m-%d %H:%M UTC")}\n📊 Topics analyzed: {len(daily_topics)}\n\nUsers can now use `/blog` to generate their daily semantic SEO blog!'
-              }
-              try:
-                  requests.post(WEBHOOK, json=webhook_msg)
-                  print('✅ Webhook notification sent')
-              except Exception as e:
-                  print(f'⚠️ Webhook error: {e}')
-          
-          print('🎯 Daily scout completed successfully!')
+              requests.post(WEBHOOK, json={'content': '✅ **Daily Blog Scout Complete**'})
           "
 
       - name: Notify Completion
         if: always()
-        run: |
-          echo "✅ GitHub Actions workflow completed"
-          echo "📅 $(date)"
+        run: echo "✅ GitHub Actions workflow completed at $(date)"
