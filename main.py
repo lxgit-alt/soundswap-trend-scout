@@ -1,16 +1,23 @@
 import os
 import requests
+import google.generativeai as genai
 from serpapi import Client
 from dotenv import load_dotenv
 from datetime import datetime
 
+# 1. Load environment variables (Local VS Code testing)
 load_dotenv()
 
 # --- CONFIGURATION ---
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# 4 Core Topics to stay under 250 credits/month (8 credits per day total)
+# Initialize Gemini 1.5 Flash
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# 4 Core Topics (Keeps you under 250 SerpApi credits/month)
 NICHE_QUERIES = [
     "latest music production gear releases 2026",
     "breaking AI audio tools for artists",
@@ -18,32 +25,35 @@ NICHE_QUERIES = [
     "music streaming industry news today"
 ]
 
-def generate_blog_outline(topic, score, link, questions):
-    """Generates a structured SEO blog outline."""
-    status = "🔥 VIRAL" if score > 75 else "📈 TRENDING"
+def get_ai_enhanced_intel(topic, score, link, snippets, questions):
+    """Uses Gemini to analyze Sentiment and generate an SEO Outline."""
     
-    outline = f"📝 **BLOG STRATEGY: {topic.upper()}**\n"
-    outline += f"*Trend Score: {score}/100 ({status})*\n"
-    outline += f"*Source: {link}*\n\n"
+    prompt = f"""
+    You are the Senior Content Strategist for SoundSwap (a hub for music producers).
     
-    outline += f"**H1: The Ultimate Guide to {topic.title()} in 2026**\n"
-    outline += "───\n"
-    outline += "**Intro:** Hook the reader with the 24h news update found in the source link.\n"
+    INPUT DATA:
+    - Topic: {topic}
+    - Trend Score: {score}/100
+    - Top Headlines/Snippets: {snippets}
+    - People Also Ask: {", ".join(questions)}
     
-    outline += "\n**H2: Why this matters for SoundSwap Creators**\n"
-    outline += "* Bullet points on workflow impact, cost-saving, or artist growth.\n"
-
-    if questions:
-        outline += "\n**H2: Expert Insights (SEO FAQ Section)**\n"
-        for q in questions[:3]:
-            outline += f"✅ **H3: {q}**\n   * Answer this in 50 words to win the Google Snippet.\n"
+    TASK:
+    1. ANALYZE SENTIMENT: Based on the snippets, is the industry reaction 'Hype' (Positive), 'Controversy' (Negative), or 'Mixed/Neutral'? Provide a 1-sentence reason.
+    2. GENERATE OUTLINE: Create a viral H1 title and a structured blog outline.
+    3. H3 HEADERS: Use the 'People Also Ask' questions as H3 headers.
+    4. PRO-TIP: Add one 'SoundSwap Pro-Tip' for independent artists.
     
-    outline += "\n**Conclusion & CTA:** Summarize and invite users to join the SoundSwap community.\n"
-    outline += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    return outline
+    FORMAT: Use Markdown for Discord. Include a 'SENTIMENT' badge at the top.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ Gemini AI Error: {str(e)}"
 
 def get_trend_score(keyword):
-    """Uses 1 SerpApi credit to get Google Trends data."""
+    """Fetches Google Trends interest score (1 SerpApi credit)."""
     try:
         client = Client(api_key=SERPAPI_KEY)
         results = client.search({
@@ -58,7 +68,7 @@ def get_trend_score(keyword):
         return 0
 
 def get_serp_data(query):
-    """Uses 1 SerpApi credit to get Google Search + PAA data."""
+    """Fetches Google Search data (1 SerpApi credit)."""
     score = get_trend_score(query)
     params = {
         "engine": "google",
@@ -71,35 +81,39 @@ def get_serp_data(query):
         client = Client(api_key=SERPAPI_KEY)
         results = client.search(params)
         organic = results.get("organic_results", [])
+        
+        # Collect snippets for Sentiment Analysis
+        snippets = " | ".join([f"{r.get('title')}: {r.get('snippet')}" for r in organic[:3]])
         paa = [q.get('question') for q in results.get("related_questions", [])]
+        first_link = organic[0].get('link') if organic else "N/A"
         
-        first_link = organic[0].get('link') if organic else "No specific news link found."
+        # Run AI Analysis
+        ai_report = get_ai_enhanced_intel(query, score, first_link, snippets, paa)
         
-        summary = f"📡 **TOPIC: {query.upper()}**\nScore: {score}/100\nLatest News: <{first_link}>\n"
-        outline = generate_blog_outline(query, score, first_link, paa)
+        header = f"📡 **TOPIC: {query.upper()}**\n"
+        header += f"📊 Trend Score: {score}/100 | 🔗 Source: <{first_link}>\n"
         
-        return f"{summary}\n{outline}"
+        return f"{header}\n{ai_report}\n"
     except Exception as e:
         return f"❌ Error scouting {query}: {str(e)}"
 
 def main():
-    if not SERPAPI_KEY or not DISCORD_WEBHOOK:
-        print("❌ API Keys missing. Check .env or GitHub Secrets.")
+    if not all([SERPAPI_KEY, DISCORD_WEBHOOK, GEMINI_API_KEY]):
+        print("❌ Setup incomplete. Check your API Keys.")
         return
 
     today = datetime.now().strftime('%B %d, %Y')
-    header = f"🎸 **SoundSwap Daily Intelligence** ({today})\n"
-    header += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    full_report = f"🔥 **SoundSwap Daily AI Intelligence + Sentiment** ({today})\n"
+    full_report += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     
-    full_report = header
     for q in NICHE_QUERIES:
         full_report += get_serp_data(q) + "\n"
 
-    # Discord 2000-character limit chunking
+    # Split for Discord 2000-char limit
     for i in range(0, len(full_report), 1900):
         requests.post(DISCORD_WEBHOOK, json={"content": full_report[i:i+1900]})
     
-    print("🚀 Daily Intelligence dispatched to SoundSwap Discord.")
+    print("🚀 AI Analysis & Outlines dispatched to SoundSwap Discord!")
 
 if __name__ == "__main__":
     main()
