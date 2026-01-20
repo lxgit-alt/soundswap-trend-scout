@@ -1,9 +1,36 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index.py" }],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "api/scout.py": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "api/interactions.py": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    { 
+      "source": "/api/interactions", 
+      "destination": "/api/interactions.py" 
+    },
+    { 
+      "source": "/api/scout", 
+      "destination": "/api/scout.py" 
+    },
+    { 
+      "source": "/(.*)", 
+      "destination": "/api/index.py" 
+    }
+  ],
   "crons": [
-  {
-    "path": "/api/scout",
-    "schedule": "14 12 * * *"
-  }
-]
+    {
+      "path": "/api/scout",
+      "schedule": "16 23 * * *"
+    }
+  ]
 }

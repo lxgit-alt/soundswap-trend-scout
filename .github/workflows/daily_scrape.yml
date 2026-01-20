@@ -1,12 +1,12 @@
-name: SoundSwap Daily Scout
+name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '14 12 * * *'
-  workflow_dispatch:
+    - cron: '16 23 * * *'  # Daily at 23:16 UTC (7:16 PM EST)
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
-  simple-scout:
+  daily-blog-scout:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -19,37 +19,164 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests
+          pip install requests google-search-results
 
-      - name: Run Simple Scout
+      - name: Run Full Scout with 4 Topics
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
         run: |
           python -c "
           import os
           import requests
+          import json
           from datetime import datetime
+          from serpapi import Client
           
-          # Get webhook from environment or secret
-          webhook = os.getenv('DISCORD_WEBHOOK')
+          # Get credentials
+          DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+          CHANNEL_ID = os.getenv('DISCORD_CHANNEL_ID')
+          SERPAPI_KEY = os.getenv('SERPAPI_KEY')
+          WEBHOOK = os.getenv('DISCORD_WEBHOOK')
           
-          if not webhook:
-              print('❌ DISCORD_WEBHOOK not set')
+          if not DISCORD_TOKEN or not CHANNEL_ID:
+              print('❌ Discord credentials missing')
               exit(1)
           
-          # Create simple message
-          message = {
-              'content': f'🎸 **SoundSwap Daily Check-in**\\n📅 {datetime.now().strftime(\"%Y-%m-%d %H:%M UTC\")}\\n\\n✅ GitHub Actions workflow executed successfully\\n🔗 Use \`/outlines [topic]\` for blog outlines\\n\\n*Scheduled run completed*'
+          # 4 Daily Topics
+          NICHE_QUERIES = [
+              'latest music production gear releases 2026',
+              'breaking AI audio tools for artists', 
+              'independent music marketing trends 2026',
+              'music streaming industry news today'
+          ]
+          
+          def get_trend_score(keyword):
+              '''Get Google Trends score.'''
+              try:
+                  client = Client(api_key=SERPAPI_KEY)
+                  results = client.search({
+                      'engine': 'google_trends',
+                      'q': keyword,
+                      'data_type': 'TIMESERIES',
+                      'date': 'now 7-d'
+                  })
+                  timeseries = results.get('interest_over_time', {}).get('timeline_data', [])
+                  return int(timeseries[-1].get('values')[0].get('value')) if timeseries else 50
+              except:
+                  return 50
+          
+          def get_serp_data(query):
+              '''Get search results for a query.'''
+              try:
+                  score = get_trend_score(query)
+                  client = Client(api_key=SERPAPI_KEY)
+                  
+                  results = client.search({
+                      'engine': 'google',
+                      'q': query,
+                      'tbs': 'qdr:d',
+                      'api_key': SERPAPI_KEY,
+                      'num': 3
+                  })
+                  
+                  organic = results.get('organic_results', [])
+                  questions = results.get('related_questions', [])[:3]
+                  
+                  first_result = organic[0] if organic else {}
+                  
+                  status = '🔥 VIRAL' if score > 75 else '📈 TRENDING' if score > 50 else '📊 STEADY'
+                  
+                  return {
+                      'query': query,
+                      'score': score,
+                      'link': first_result.get('link', 'No link found'),
+                      'title': first_result.get('title', ''),
+                      'questions': [q.get('question') for q in questions if q.get('question')],
+                      'status': status
+                  }
+              except Exception as e:
+                  print(f'Error for {query}: {e}')
+                  return {
+                      'query': query,
+                      'score': 50,
+                      'link': 'No link found',
+                      'title': '',
+                      'questions': [],
+                      'status': '📊 STEADY'
+                  }
+          
+          print('🚀 Starting daily blog scout...')
+          
+          # Get data for all 4 topics
+          daily_topics = []
+          for query in NICHE_QUERIES:
+              print(f'📡 Fetching: {query}')
+              topic_data = get_serp_data(query)
+              daily_topics.append(topic_data)
+          
+          # Build the daily report
+          report = f'🎸 **SOUNDSWAP DAILY BLOG TOPICS** ({datetime.now().strftime("%Y-%m-%d")})\n\n'
+          report += '**Choose ONE topic for today\'s semantic SEO blog:**\n\n'
+          
+          for i, topic in enumerate(daily_topics, 1):
+              emoji = ['1️⃣', '2️⃣', '3️⃣', '4️⃣'][i-1]
+              
+              # Preview PAA questions
+              paa_preview = topic['questions'][:2] if topic['questions'] else ['What producers need to know']
+              
+              report += f'{emoji} **{topic["query"].upper()}**\n'
+              report += f'   📊 Trend: {topic["score"]}/100 {topic["status"]}\n'
+              report += f'   🔗 Source: {topic["link"][:50]}...\n'
+              report += f'   ❓ PAA: {paa_preview[0][:40]}...\n\n'
+          
+          report += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+          report += '**HOW TO GENERATE YOUR BLOG:**\n'
+          report += '1. Type `/blog` in this channel\n'
+          report += '2. Choose topic (1-4)\n'  
+          report += '3. Choose outline style\n'
+          report += '4. Get semantic SEO blog with PAA → H3 headers!\n\n'
+          report += '⏱️ *Only 1 blog per day for maximum SEO impact*'
+          
+          # Send to Discord channel using Bot token
+          url = f'https://discord.com/api/v10/channels/{CHANNEL_ID}/messages'
+          headers = {
+              'Authorization': f'Bot {DISCORD_TOKEN}',
+              'Content-Type': 'application/json'
           }
           
-          # Send to Discord
-          try:
-              response = requests.post(webhook, json=message)
-              if response.status_code == 204:
-                  print('✅ Notification sent to Discord')
-              else:
-                  print(f'⚠️ Discord response: {response.status_code}')
-          except Exception as e:
-              print(f'❌ Failed to send: {e}')
+          # Split if too long
+          max_length = 1900
+          chunks = [report[i:i + max_length] for i in range(0, len(report), max_length)]
+          
+          for i, chunk in enumerate(chunks):
+              try:
+                  response = requests.post(url, headers=headers, json={'content': chunk})
+                  if response.status_code == 200:
+                      print(f'✅ Chunk {i+1}/{len(chunks)} sent')
+                  else:
+                      print(f'⚠️ Chunk {i+1} failed: {response.status_code}')
+              except Exception as e:
+                  print(f'❌ Error sending chunk {i+1}: {e}')
+          
+          # Also send simple webhook notification if available
+          if WEBHOOK:
+              webhook_msg = {
+                  'content': f'✅ **Daily Blog Scout Complete**\n📅 {datetime.now().strftime("%Y-%m-%d %H:%M UTC")}\n📊 Topics analyzed: {len(daily_topics)}\n\nUsers can now use `/blog` to generate their daily semantic SEO blog!'
+              }
+              try:
+                  requests.post(WEBHOOK, json=webhook_msg)
+                  print('✅ Webhook notification sent')
+              except Exception as e:
+                  print(f'⚠️ Webhook error: {e}')
+          
+          print('🎯 Daily scout completed successfully!')
           "
+
+      - name: Notify Completion
+        if: always()
+        run: |
+          echo "✅ GitHub Actions workflow completed"
+          echo "📅 $(date)"
