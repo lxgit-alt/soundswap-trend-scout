@@ -26,65 +26,62 @@ headers = {
 print(f"🔧 Registering commands for App ID: {APP_ID}")
 print(f"📝 Target URL: {url}")
 
-# First, let's delete any existing commands to avoid conflicts
-print("\n🗑️  Deleting existing commands...")
+# First, list current commands
+print("\n📋 Current registered commands:")
 response = requests.get(url, headers=headers)
 if response.status_code == 200:
-    existing_commands = response.json()
-    for cmd in existing_commands:
-        delete_url = f"{url}/{cmd['id']}"
-        del_response = requests.delete(delete_url, headers=headers)
-        if del_response.status_code == 204:
-            print(f"✅ Deleted command: {cmd['name']}")
-        else:
-            print(f"❌ Failed to delete {cmd['name']}: {del_response.status_code}")
+    commands = response.json()
+    for cmd in commands:
+        print(f"• /{cmd['name']} - {cmd.get('description', 'No description')}")
 
-# Now register the slash command (CORRECT WAY)
-slash_command = {
-    "name": "outlines",
-    "description": "Generate 4 blog outline approaches with sentiment analysis",
+# Register NEW /blog command (MAIN COMMAND)
+blog_command = {
+    "name": "blog",
+    "description": "Generate ONE semantic SEO blog from daily topics (PAA → H3 integration)",
     "type": 1,  # Slash command
-    "options": [
-        {
-            "name": "topic",
-            "description": "Topic for blog outlines (or reply to a message)",
-            "type": 3,  # String
-            "required": False
-        }
-    ],
-    "integration_types": [0, 1],  # Guild and DM
-    "dm_permission": True
-}
-
-print("\n📨 Registering slash command '/outlines'...")
-response = requests.post(url, headers=headers, json=slash_command)
-
-if response.status_code in [200, 201]:
-    print("✅ Slash command registered successfully!")
-    print(json.dumps(response.json(), indent=2))
-else:
-    print(f"❌ Failed to register slash command: {response.status_code}")
-    print(f"Response: {response.text}")
-
-# Register a user context menu command (right-click on user)
-user_context_command = {
-    "name": "Generate User Outlines",
-    "type": 2,  # User context menu
     "integration_types": [0, 1],
     "dm_permission": True
 }
 
-print("\n📨 Registering user context menu command...")
-response = requests.post(url, headers=headers, json=user_context_command)
+print("\n📨 Registering NEW command '/blog'...")
+response = requests.post(url, headers=headers, json=blog_command)
 
 if response.status_code in [200, 201]:
-    print("✅ User context command registered!")
+    print("✅ /blog command registered successfully!")
     print(json.dumps(response.json(), indent=2))
 else:
-    print(f"❌ Failed to register user context: {response.status_code}")
+    print(f"❌ Failed to register /blog: {response.status_code}")
     print(f"Response: {response.text}")
 
-print("\n🎯 To use the bot in Discord:")
-print("1. Type /outlines [topic] in any channel")
-print("2. Or type /outlines without a topic (it will use recent messages)")
-print("\n⚠️  Note: For message context menu, we'll handle it differently in the FastAPI app.")
+# Keep existing /outlines for backward compatibility
+outlines_command = {
+    "name": "outlines",
+    "description": "Quick 4 blog outlines (legacy command)",
+    "type": 1,
+    "options": [
+        {
+            "name": "topic",
+            "description": "Topic for outlines",
+            "type": 3,
+            "required": False
+        }
+    ],
+    "integration_types": [0, 1],
+    "dm_permission": True
+}
+
+print("\n📨 Registering command '/outlines'...")
+response = requests.post(url, headers=headers, json=outlines_command)
+
+if response.status_code in [200, 201]:
+    print("✅ /outlines command registered successfully!")
+else:
+    print(f"❌ Failed to register /outlines: {response.status_code}")
+
+print("\n🎯 **NEW WORKFLOW:**")
+print("1. Daily scout posts 4 topics")
+print("2. User types /blog")
+print("3. Chooses ONE topic (1-4)")
+print("4. Chooses outline style (1-4)")
+print("5. Gets ONE semantic SEO blog with PAA → H3 headers")
+print("\n⏱️  Only 1 blog per day for maximum SEO impact!")
