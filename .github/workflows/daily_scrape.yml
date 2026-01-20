@@ -2,8 +2,8 @@ name: SoundSwap Daily Scout
 
 on:
   schedule:
-    # Runs at 09:00 UTC (4:00 AM EST) every single day
-    - cron: '0 9 * * *'
+    # Updates the run to 12:12 PM UTC (Next run in ~1 hour)
+    - cron: '12 12 * * *'
   workflow_dispatch: # Allows you to run it manually anytime
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install serpapi python-dotenv requests
+          pip install google-search-results python-dotenv requests
 
       - name: Execute Scout
         env:
