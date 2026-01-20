@@ -2,236 +2,54 @@ name: SoundSwap Daily Scout
 
 on:
   schedule:
-    # Run daily at 12:12 PM UTC (7:12 AM EST / 8:12 AM EDT)
-    - cron: '12 12 * * *'
-  workflow_dispatch: # Allows manual trigger
-  push:
-    branches: [ main ]
-    paths:
-      - '*.py'
-      - '.github/workflows/**'
-      - 'requirements.txt'
+    - cron: '14 12 * * *'
+  workflow_dispatch:
 
 jobs:
-  run-daily-scout:
+  simple-scout:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      PYTHON_VERSION: '3.11'
-      VERCEL_PROJECT_URL: ${{ secrets.VERCEL_PROJECT_URL }}
-      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install requests python-dotenv
+          pip install requests
 
-      - name: Test API Connection
-        id: test-api
-        run: |
-          echo "Testing connection to Vercel deployment..."
-          if [ -n "${{ secrets.VERCEL_PROJECT_URL }}" ]; then
-            response=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.VERCEL_PROJECT_URL }}/health" || echo "error")
-            if [ "$response" = "200" ] || [ "$response" = "404" ]; then
-              echo "API Connection: SUCCESS ($response)"
-              echo "api_status=success" >> $GITHUB_OUTPUT
-            else
-              echo "API Connection: FAILED ($response)"
-              echo "api_status=failed" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "Vercel URL not configured, will run locally"
-            echo "api_status=local" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Trigger Daily Scout (Remote)
-        if: steps.test-api.outputs.api_status == 'success'
+      - name: Run Simple Scout
         env:
-          VERCEL_URL: ${{ secrets.VERCEL_PROJECT_URL }}
-        run: |
-          echo "Triggering remote scout via Vercel..."
-          
-          # Option 1: Direct API call
-          response=$(curl -s -w "\n%{http_code}" "$VERCEL_URL/api/scout")
-          status_code=$(echo "$response" | tail -n1)
-          response_body=$(echo "$response" | sed '$d')
-          
-          echo "Response Code: $status_code"
-          echo "Response Body: $response_body"
-          
-          if [ "$status_code" = "200" ]; then
-            echo "REMOTE_SCOUT_SUCCESS=true" >> $GITHUB_ENV
-            echo "MESSAGE_COUNT=$(echo "$response_body" | grep -o '"topics":[0-9]*' | cut -d: -f2)" >> $GITHUB_ENV
-          else
-            echo "REMOTE_SCOUT_SUCCESS=false" >> $GITHUB_ENV
-            echo "SCOUT_ERROR=Remote API failed: $status_code" >> $GITHUB_ENV
-          fi
-
-      - name: Run Local Scout (Fallback)
-        if: steps.test-api.outputs.api_status != 'success'
-        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          DISCORD_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-          DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
-          DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
         run: |
-          echo "Running scout locally as fallback..."
-          
-          # Create a local version of the scout
-          cat > local_scout.py << 'EOF'
+          python -c "
           import os
           import requests
-          import json
           from datetime import datetime
           
-          SERPAPI_KEY = os.getenv("SERPAPI_KEY")
-          DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-          CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
+          # Get webhook from environment or secret
+          webhook = os.getenv('DISCORD_WEBHOOK')
           
-          NICHE_QUERIES = [
-              "latest music production gear releases 2026",
-              "breaking AI audio tools for artists", 
-              "independent music marketing trends 2026",
-              "music streaming industry news today"
-          ]
+          if not webhook:
+              print('❌ DISCORD_WEBHOOK not set')
+              exit(1)
           
-          def send_to_discord(content):
-              url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
-              headers = {"Authorization": f"Bot {DISCORD_TOKEN}"}
-              
-              for i in range(0, len(content), 1900):
-                  chunk = content[i:i+1900]
-                  try:
-                      response = requests.post(url, headers=headers, json={"content": chunk})
-                      if response.status_code != 200:
-                          print(f"Failed to send chunk: {response.status_code}")
-                      print(f"Sent chunk {i//1900 + 1}")
-                  except Exception as e:
-                      print(f"Error sending to Discord: {e}")
-          
-          if __name__ == "__main__":
-              report = f"🎸 **SoundSwap Daily Scout (Local Run)**\n"
-              report += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-              report += "*Note: Running in fallback mode, some features limited*\n\n"
-              
-              for query in NICHE_QUERIES:
-                  report += f"📡 **{query.upper()}**\n"
-                  report += f"🔍 Check trends manually for: {query}\n"
-                  report += "💡 Outline approaches:\n"
-                  report += "   • Technical Analysis\n"
-                  report += "   • Creative Applications\n"
-                  report += "   • Industry Impact\n"
-                  report += "   • Beginner's Guide\n\n"
-              
-              report += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-              report += "⚠️ **Status:** Running in fallback mode\n"
-              report += "🔧 Fix: Check Vercel deployment and API keys\n"
-              
-              send_to_discord(report)
-              print("✅ Local scout completed")
-          EOF
-          
-          python local_scout.py
-          echo "LOCAL_SCOUT_SUCCESS=true" >> $GITHUB_ENV
-
-      - name: Send Success Notification
-        if: success() && (env.REMOTE_SCOUT_SUCCESS == 'true' || env.LOCAL_SCOUT_SUCCESS == 'true')
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          # Determine mode and status
-          if [ "$REMOTE_SCOUT_SUCCESS" = "true" ]; then
-            MODE="🚀 **Remote (Vercel)**"
-            TOPICS_COUNT="$MESSAGE_COUNT"
-            COLOR="3066993" # Green
-          else
-            MODE="🔧 **Local (Fallback)**"
-            TOPICS_COUNT="4"
-            COLOR="15105570" # Orange
-          fi
-          
-          EMBED_JSON=$(cat << EOF
-          {
-            "embeds": [{
-              "title": "✅ SoundSwap Daily Scout Completed",
-              "description": "Daily intelligence report successfully sent to Discord channel.",
-              "color": $COLOR,
-              "fields": [
-                {"name": "🏃‍♂️ Execution Mode", "value": "$MODE", "inline": true},
-                {"name": "📊 Topics Processed", "value": "$TOPICS_COUNT", "inline": true},
-                {"name": "⏰ Run Time", "value": "$(date -u '+%Y-%m-%d %H:%M UTC')", "inline": true},
-                {"name": "🔗 Workflow", "value": "[View Run]($RUN_URL)", "inline": true},
-                {"name": "📅 Schedule", "value": "Daily at 12:12 UTC", "inline": true},
-                {"name": "🔄 Trigger", "value": "${{ github.event_name }}", "inline": true}
-              ],
-              "footer": {
-                "text": "SoundSwap AI • GitHub Actions",
-                "icon_url": "https://cdn.discordapp.com/emojis/1108096873328418836.webp"
-              },
-              "thumbnail": {
-                "url": "https://cdn.discordapp.com/emojis/1108096873328418836.webp"
-              }
-            }]
+          # Create simple message
+          message = {
+              'content': f'🎸 **SoundSwap Daily Check-in**\\n📅 {datetime.now().strftime(\"%Y-%m-%d %H:%M UTC\")}\\n\\n✅ GitHub Actions workflow executed successfully\\n🔗 Use \`/outlines [topic]\` for blog outlines\\n\\n*Scheduled run completed*'
           }
-          EOF
-          )
           
-          curl -H "Content-Type: application/json" \
-               -d "$EMBED_JSON" \
-               "$DISCORD_WEBHOOK"
-
-      - name: Send Failure Notification
-        if: failure()
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          EMBED_JSON=$(cat << EOF
-          {
-            "embeds": [{
-              "title": "❌ SoundSwap Daily Scout Failed",
-              "description": "The daily intelligence report failed to complete.",
-              "color": "15548997",
-              "fields": [
-                {"name": "🔍 Error Details", "value": "Check workflow logs for details", "inline": false},
-                {"name": "🔄 Trigger", "value": "${{ github.event_name }}", "inline": true},
-                {"name": "🔗 Workflow", "value": "[View Run]($RUN_URL)", "inline": true},
-                {"name": "📅 Schedule", "value": "Daily at 12:12 UTC", "inline": true}
-              ],
-              "footer": {
-                "text": "SoundSwap AI • Requires investigation",
-                "icon_url": "https://cdn.discordapp.com/emojis/1108096873328418836.webp"
-              }
-            }]
-          }
-          EOF
-          )
-          
-          curl -H "Content-Type: application/json" \
-               -d "$EMBED_JSON" \
-               "$DISCORD_WEBHOOK"
-
-      - name: Upload Scout Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: scout-logs
-          path: |
-            ${{ github.workspace }}/*.log
-            ${{ github.workspace }}/scout_*.txt
-          retention-days: 7
+          # Send to Discord
+          try:
+              response = requests.post(webhook, json=message)
+              if response.status_code == 204:
+                  print('✅ Notification sent to Discord')
+              else:
+                  print(f'⚠️ Discord response: {response.status_code}')
+          except Exception as e:
+              print(f'❌ Failed to send: {e}')
+          "
