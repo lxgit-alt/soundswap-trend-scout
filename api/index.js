@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Configuration from environment variables
 const {
   DISCORD_PUBLIC_KEY,
-  DISCORD_TOKEN,
+  DISCORD_BOT_TOKEN,
   DISCORD_APP_ID,
   DISCORD_CHANNEL_ID,
   GEMINI_API_KEY,
@@ -65,6 +65,11 @@ export default async function handler(request) {
     return await handleDailyScout(request);
   }
   
+  if (pathname === '/api/scout-direct' && request.method === 'POST') {
+    // Direct execution endpoint for GitHub Actions
+    return await handleDirectScout(request);
+  }
+  
   if (pathname === '/health' && request.method === 'GET') {
     return new Response(JSON.stringify({
       status: 'healthy',
@@ -74,6 +79,7 @@ export default async function handler(request) {
       endpoints: {
         interactions: '/api/interactions',
         scout: '/api/scout',
+        'scout-direct': '/api/scout-direct (POST for GitHub Actions)',
         health: '/health'
       }
     }), { status: 200, headers });
@@ -108,6 +114,7 @@ export default async function handler(request) {
       'GET /',
       'GET /health',
       'GET /api/scout',
+      'POST /api/scout-direct',
       'POST /api/interactions'
     ]
   }), { 
@@ -209,34 +216,80 @@ async function handleDiscordInteraction(request) {
 }
 
 /**
- * Handle daily scout cron job
+ * Handle daily scout cron job (legacy - for triggering only)
  */
 async function handleDailyScout(request) {
   try {
     console.log('Starting daily scout...');
     
     // Return response immediately
-    const response = new Response(JSON.stringify({ 
-      status: 'processing', 
-      message: 'Daily scout job started',
-      timestamp: new Date().toISOString()
+    return new Response(JSON.stringify({ 
+      status: 'triggered', 
+      message: 'Daily scout triggered. For actual execution, use /api/scout-direct POST endpoint.',
+      timestamp: new Date().toISOString(),
+      note: 'Use POST /api/scout-direct with GitHub Actions for reliable execution'
     }), { 
       status: 200, 
       headers: { 'Content-Type': 'application/json' } 
     });
-    
-    // Run scout in background
-    runDailyScout().catch(error => {
-      console.error('Scout execution error:', error);
-    });
-    
-    return response;
     
   } catch (error) {
     console.error('Scout handler error:', error);
     return new Response(JSON.stringify({ 
       error: error.message,
       status: 'error'
+    }), { 
+      status: 500, 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+  }
+}
+
+/**
+ * Handle direct scout execution (for GitHub Actions)
+ */
+async function handleDirectScout(request) {
+  try {
+    console.log('Starting direct scout execution...');
+    
+    // Verify authorization if CRON_SECRET is set
+    if (CRON_SECRET) {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401, 
+          headers: { 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      const token = authHeader.split(' ')[1];
+      if (token !== CRON_SECRET) {
+        return new Response(JSON.stringify({ error: 'Invalid token' }), { 
+          status: 403, 
+          headers: { 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Execute scout synchronously
+    const result = await runDailyScout();
+    
+    return new Response(JSON.stringify({ 
+      status: 'completed', 
+      message: 'Daily scout completed successfully',
+      timestamp: new Date().toISOString(),
+      result: result
+    }), { 
+      status: 200, 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+    
+  } catch (error) {
+    console.error('Direct scout error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      status: 'error',
+      timestamp: new Date().toISOString()
     }), { 
       status: 500, 
       headers: { 'Content-Type': 'application/json' } 
@@ -396,8 +449,16 @@ async function runDailyScout() {
     
     console.log('Daily scout completed successfully');
     
+    return {
+      success: true,
+      topicsProcessed: dailyTopics.length,
+      discordSent: true,
+      timestamp: new Date().toISOString()
+    };
+    
   } catch (error) {
     console.error('Scout execution error:', error);
+    throw error;
   }
 }
 
@@ -608,19 +669,22 @@ async function sendToDiscordChannel(content) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bot ${DISCORD_TOKEN}`,
+        'Authorization': `Bot ${DISCORD_BOT_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ content: content.slice(0, 2000) })
     });
     
     if (!response.ok) {
-      console.error(`Failed to send to Discord channel: ${response.status} ${await response.text()}`);
+      const errorText = await response.text();
+      console.error(`Failed to send to Discord channel: ${response.status} ${errorText}`);
+      throw new Error(`Discord API error: ${response.status}`);
     } else {
       console.log('Message sent to Discord successfully');
     }
   } catch (error) {
     console.error('Failed to send to Discord channel:', error);
+    throw error;
   }
 }
 

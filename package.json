@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+    "scout": "node scripts/scout-runner.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "dotenv": "^17.2.3",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@vercel/edge": "^0.2.0"
   },
   "engines": {
     "node": ">=18.0.0"

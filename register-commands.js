@@ -2,9 +2,9 @@ const axios = require('axios');
 require('dotenv').config();
 
 async function registerCommands() {
-  const { DISCORD_TOKEN, DISCORD_APP_ID } = process.env;
+  const { DISCORD_BOT_TOKEN, DISCORD_APP_ID } = process.env;
   
-  if (!DISCORD_TOKEN) {
+  if (!DISCORD_BOT_TOKEN) {
     console.error('❌ DISCORD_BOT_TOKEN not found in .env');
     process.exit(1);
   }
@@ -16,7 +16,7 @@ async function registerCommands() {
   
   const url = `https://discord.com/api/v10/applications/${DISCORD_APP_ID}/commands`;
   const headers = {
-    'Authorization': `Bot ${DISCORD_TOKEN}`,
+    'Authorization': `Bot ${DISCORD_BOT_TOKEN}`,
     'Content-Type': 'application/json'
   };
   

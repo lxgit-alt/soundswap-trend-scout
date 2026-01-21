@@ -17,7 +17,7 @@ app = FastAPI()
 # --- CONFIG ---
 PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 APP_ID = os.getenv("DISCORD_APP_ID")
@@ -710,7 +710,7 @@ async def daily_scout():
     
     # Send to Discord
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
-    headers = {"Authorization": f"Bot {DISCORD_TOKEN}"}
+    headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}"}
     
     # Split message if too long
     max_length = 1900
