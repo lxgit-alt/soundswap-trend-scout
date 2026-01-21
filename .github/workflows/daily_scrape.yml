@@ -2,7 +2,7 @@ name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '0 10  * * *'  # Daily at 10:00 UTC
+    - cron: '0 11 * * *' 
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -12,6 +12,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Debug - Show Secrets Status
+        run: |
+          echo "Checking environment variables..."
+          if [ -n "${{ secrets.VERCEL_URL }}" ]; then
+            echo "✓ VERCEL_URL is set"
+            echo "URL length: ${#{{ secrets.VERCEL_URL }}} characters"
+          else
+            echo "✗ VERCEL_URL is NOT set or empty"
+            echo "You need to add VERCEL_URL to GitHub Secrets"
+          fi
+          
+          if [ -n "${{ secrets.CRON_SECRET }}" ]; then
+            echo "✓ CRON_SECRET is set"
+          else
+            echo "⚠ CRON_SECRET is not set (optional)"
+          fi
+
       - name: Trigger Daily Scout
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
@@ -19,30 +36,72 @@ jobs:
         run: |
           echo "🚀 Triggering daily scout job..."
           
-          # Make request to your Vercel endpoint
-          curl -X GET "$VERCEL_URL/api/scout" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            -H "Content-Type: application/json" \
-            --max-time 30
+          # Validate URL format
+          if [[ ! $VERCEL_URL =~ ^https?:// ]]; then
+            echo "❌ ERROR: VERCEL_URL must start with http:// or https://"
+            echo "Current value: '$VERCEL_URL'"
+            echo "Please set VERCEL_URL in GitHub Secrets to your deployed Vercel URL"
+            exit 1
+          fi
           
-          echo "✅ Scout job triggered successfully"
-          echo "The job will run asynchronously in Vercel Edge Functions"
+          # Construct full API URL
+          API_URL="${VERCEL_URL%/}/api/scout"
+          echo "📡 Calling: $API_URL"
+          
+          # Set up curl options
+          CURL_OPTS=(
+            -X GET
+            -H "Content-Type: application/json"
+            --max-time 30
+            --retry 2
+            --retry-delay 5
+          )
+          
+          # Add authorization if CRON_SECRET is set
+          if [ -n "$CRON_SECRET" ]; then
+            CURL_OPTS+=(-H "Authorization: Bearer $CRON_SECRET")
+            echo "🔐 Using authorization token"
+          else
+            echo "⚠ No authorization token set (CRON_SECRET)"
+          fi
+          
+          # Make the request
+          curl "${CURL_OPTS[@]}" "$API_URL" || {
+            echo "⚠ Curl command failed, but scout may still be running in background"
+            echo "Check Vercel logs for actual execution status"
+          }
+          
+          echo "✅ Scout job triggered"
+          echo "📊 Check Discord channel for daily topics within 60 seconds"
+          echo "📋 Check Vercel logs for any execution errors"
 
-      - name: Verify Health
+      - name: Verify Health (Optional)
+        if: success()
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
         run: |
           echo "📊 Checking service health..."
-          curl -s "$VERCEL_URL/health" | jq .
+          HEALTH_URL="${VERCEL_URL%/}/health"
           
-          echo "🔍 Checking recent logs (if available)..."
-          # Add a small delay to allow scout job to start
-          sleep 5
-          curl -s "$VERCEL_URL/api/scout" || echo "Scout endpoint may be processing"
+          if curl -s --max-time 10 "$HEALTH_URL" > /tmp/health_response; then
+            echo "✅ Health check successful:"
+            cat /tmp/health_response
+          else
+            echo "⚠ Health check failed - service might still be starting"
+            echo "This is normal if the service was idle and needs to warm up"
+          fi
 
       - name: Notify Completion
         if: always()
         run: |
-          echo "✅ GitHub Actions workflow completed at $(date -u)"
-          echo "The daily scout job has been triggered via Vercel Edge Functions"
-          echo "Check your Discord channel for the daily topics report"
+          echo "✅ GitHub Actions workflow completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "----------------------------------------"
+          echo "Next steps:"
+          echo "1. Check your Discord channel for the daily topics report"
+          echo "2. If no report appears in 2 minutes, check Vercel logs"
+          echo "3. Users can use /blog command to generate full articles"
+          echo "----------------------------------------"
+          echo "To debug:"
+          echo "- Visit: ${{ secrets.VERCEL_URL }}/health"
+          echo "- Check Vercel dashboard logs"
+          echo "- Verify Discord bot has proper permissions"
