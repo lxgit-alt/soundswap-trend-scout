@@ -14,13 +14,13 @@ jobs:
 
       - name: Trigger Daily Scout
         env:
-          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "🚀 Triggering daily scout job..."
           
           # Make request to your Vercel endpoint
-          curl -X GET "$VERCEL_APP_URL/api/scout" \
+          curl -X GET "$VERCEL_URL/api/scout" \
             -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
             --max-time 30
@@ -30,15 +30,15 @@ jobs:
 
       - name: Verify Health
         env:
-          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
         run: |
           echo "📊 Checking service health..."
-          curl -s "$VERCEL_APP_URL/health" | jq .
+          curl -s "$VERCEL_URL/health" | jq .
           
           echo "🔍 Checking recent logs (if available)..."
           # Add a small delay to allow scout job to start
           sleep 5
-          curl -s "$VERCEL_APP_URL/api/scout" || echo "Scout endpoint may be processing"
+          curl -s "$VERCEL_URL/api/scout" || echo "Scout endpoint may be processing"
 
       - name: Notify Completion
         if: always()
