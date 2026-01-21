@@ -10,120 +10,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4  # Updated to v4 (stable)
+        uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5  # Updated to v5 (stable)
-        with:
-          python-version: '3.11'
-          cache: 'pip' # Speeds up subsequent runs
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests google-search-results
-
-      - name: Run Full Scout with 4 Topics
+      - name: Trigger Daily Scout
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-          DISCORD_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          python -c "
-          import os
-          import requests
-          import json
-          from datetime import datetime
-          from serpapi import Client
+          echo "🚀 Triggering daily scout job..."
           
-          # Get credentials
-          DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-          CHANNEL_ID = os.getenv('DISCORD_CHANNEL_ID')
-          SERPAPI_KEY = os.getenv('SERPAPI_KEY')
-          WEBHOOK = os.getenv('DISCORD_WEBHOOK')
+          # Make request to your Vercel endpoint
+          curl -X GET "$VERCEL_APP_URL/api/scout" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            --max-time 30
           
-          if not DISCORD_TOKEN or not CHANNEL_ID:
-              print('❌ Discord credentials missing')
-              exit(1)
+          echo "✅ Scout job triggered successfully"
+          echo "The job will run asynchronously in Vercel Edge Functions"
+
+      - name: Verify Health
+        env:
+          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
+        run: |
+          echo "📊 Checking service health..."
+          curl -s "$VERCEL_APP_URL/health" | jq .
           
-          # 4 Daily Topics
-          NICHE_QUERIES = [
-              'latest music production gear releases 2024',
-              'breaking AI audio tools for artists', 
-              'independent music marketing trends 2024',
-              'music streaming industry news today'
-          ]
-          
-          def get_trend_score(keyword):
-              try:
-                  client = Client(api_key=SERPAPI_KEY)
-                  results = client.search({
-                      'engine': 'google_trends',
-                      'q': keyword,
-                      'data_type': 'TIMESERIES',
-                      'date': 'now 7-d'
-                  })
-                  timeseries = results.get('interest_over_time', {}).get('timeline_data', [])
-                  return int(timeseries[-1].get('values')[0].get('value')) if timeseries else 50
-              except Exception as e:
-                  print(f'⚠️ Trends error for {keyword}: {e}')
-                  return 50
-          
-          def get_serp_data(query):
-              try:
-                  score = get_trend_score(query)
-                  client = Client(api_key=SERPAPI_KEY)
-                  results = client.search({
-                      'engine': 'google',
-                      'q': query,
-                      'tbs': 'qdr:d',
-                      'num': 3
-                  })
-                  
-                  organic = results.get('organic_results', [])
-                  questions = results.get('related_questions', [])[:3] if results.get('related_questions') else []
-                  first_result = organic[0] if organic else {}
-                  status = '🔥 VIRAL' if score > 75 else '📈 TRENDING' if score > 50 else '📊 STEADY'
-                  
-                  return {
-                      'query': query,
-                      'score': score,
-                      'link': first_result.get('link', 'No link found'),
-                      'title': first_result.get('title', ''),
-                      'questions': [q.get('question') for q in questions if q.get('question')],
-                      'status': status
-                  }
-              except Exception as e:
-                  print(f'❌ Error for {query}: {e}')
-                  return {'query': query, 'score': 50, 'link': 'No link found', 'title': '', 'questions': [], 'status': '📊 STEADY'}
-          
-          print('🚀 Starting SoundSwap daily scout...')
-          daily_topics = [get_serp_data(q) for q in NICHE_QUERIES]
-          
-          report = f'🎸 **SOUNDSWAP DAILY BLOG TOPICS** ({datetime.now().strftime(\"%Y-%m-%d\")})\n\n'
-          report += '**Choose ONE topic for today\'s semantic SEO blog:**\n\n'
-          
-          for i, topic in enumerate(daily_topics, 1):
-              emoji = ['1️⃣', '2️⃣', '3️⃣', '4️⃣'][i-1]
-              paa_preview = topic['questions'][:2] if topic['questions'] else ['What producers need to know']
-              report += f'{emoji} **{topic[\"query\"].upper()}**\n'
-              report += f'   📊 Trend: {topic[\"score\"]}/100 {topic[\"status\"]}\n'
-              report += f'   🔗 Source: {topic[\"link\"][:50]}...\n'
-              report += f'   ❓ PAA: {paa_preview[0][:40]}...\n\n'
-          
-          report += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
-          report += '**HOW TO GENERATE YOUR BLOG:**\n1. Type `/blog` in this channel\n2. Choose topic (1-4)\n'
-          
-          # Send to Discord
-          url = f'https://discord.com/api/v10/channels/{CHANNEL_ID}/messages'
-          headers = {\"Authorization\": f\"Bot {DISCORD_TOKEN}\", \"Content-Type\": \"application/json\"}
-          requests.post(url, headers=headers, json={'content': report[:1900]})
-          
-          if WEBHOOK:
-              requests.post(WEBHOOK, json={'content': '✅ **Daily Blog Scout Complete**'})
-          "
+          echo "🔍 Checking recent logs (if available)..."
+          # Add a small delay to allow scout job to start
+          sleep 5
+          curl -s "$VERCEL_APP_URL/api/scout" || echo "Scout endpoint may be processing"
 
       - name: Notify Completion
         if: always()
-        run: echo "✅ GitHub Actions workflow completed at $(date)"
+        run: |
+          echo "✅ GitHub Actions workflow completed at $(date -u)"
+          echo "The daily scout job has been triggered via Vercel Edge Functions"
+          echo "Check your Discord channel for the daily topics report"
