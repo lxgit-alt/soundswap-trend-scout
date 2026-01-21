@@ -37,11 +37,15 @@ jobs:
           ALL_SET=true
           
           for var in "${REQUIRED_VARS[@]}"; do
-            if [ -z "${!var}" ]; then
+            # Step 1: Get the value of the variable whose name is stored in $var
+            val="${!var}"
+            
+            if [ -z "$val" ]; then
               echo "❌ $var is NOT set"
               ALL_SET=false
             else
-              echo "✓ $var is set (length: ${#!var} chars)"
+              # Step 2: Get the length of the string stored in $val
+              echo "✓ $var is set (length: ${#val} chars)"
             fi
           done
           
@@ -56,7 +60,7 @@ jobs:
           
           # Check optional variables
           if [ -n "$VERCEL_URL" ]; then
-            echo "✓ VERCEL_URL is set: $VERCEL_URL"
+            echo "✓ VERCEL_URL is set (length: ${#VERCEL_URL} chars)"
           else
             echo "⚠ VERCEL_URL is not set (optional for direct API call)"
           fi
