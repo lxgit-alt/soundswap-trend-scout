@@ -2,7 +2,7 @@ name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '0 11 * * *' 
+    - cron: '0 12 * * *'  # Daily at 12:00 UTC
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -13,17 +13,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Debug - Show Secrets Status
+        env:
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "Checking environment variables..."
-          if [ -n "${{ secrets.VERCEL_URL }}" ]; then
+          # Now accessing via env vars, which is safer and fixes the syntax error
+          if [ -n "$VERCEL_URL" ]; then
             echo "✓ VERCEL_URL is set"
-            echo "URL length: ${#{{ secrets.VERCEL_URL }}} characters"
+            echo "URL length: ${#VERCEL_URL} characters"
           else
             echo "✗ VERCEL_URL is NOT set or empty"
             echo "You need to add VERCEL_URL to GitHub Secrets"
           fi
           
-          if [ -n "${{ secrets.CRON_SECRET }}" ]; then
+          if [ -n "$CRON_SECRET" ]; then
             echo "✓ CRON_SECRET is set"
           else
             echo "⚠ CRON_SECRET is not set (optional)"
