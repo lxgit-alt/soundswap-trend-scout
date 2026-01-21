@@ -2,7 +2,7 @@ name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Daily at 9:00 UTC
+    - cron: '0 10  * * *'  # Daily at 10:00 UTC
   workflow_dispatch:  # Allows manual triggering
 
 jobs:

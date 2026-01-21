@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/scout",
-      "schedule": "0 9 * * *"
+      "schedule": "0 10 * * *"
     }
   ],
   "headers": [
