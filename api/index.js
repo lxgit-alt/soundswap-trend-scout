@@ -15,13 +15,100 @@ const {
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-// Niche queries for daily scout
-const NICHE_QUERIES = [
-  "latest music production gear releases 2026",
-  "breaking AI audio tools for artists",
-  "independent music marketing trends 2026",
-  "music streaming industry news today"
-];
+// Dynamic query generation based on day of week
+function generateDailyQueries() {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+  const dayOfMonth = now.getDate();
+  const weekOfYear = Math.floor(dayOfMonth / 7) + 1;
+  const month = now.getMonth(); // 0-11
+  const year = now.getFullYear();
+  
+  // Monthly themes to prevent repetition
+  const monthlyThemes = [
+    'AI Music Production Tools',
+    'Music Gear Releases',
+    'Music Industry News',
+    'Audio Technology',
+    'Music Business Trends',
+    'Creative Production Techniques'
+  ];
+  
+  const theme = monthlyThemes[month % monthlyThemes.length];
+  
+  // Query pools for each category
+  const aiToolsQueries = [
+    `latest AI audio tools ${month + 1}/${year}`,
+    `AI music production software ${year}`,
+    `best AI plugins for producers ${month + 1}/${year}`,
+    `AI mastering tools reviews ${year}`,
+    `artificial intelligence in music production`,
+    `AI vocal processing ${month + 1} ${year}`,
+    `machine learning music composition`,
+    `AI beat making tools ${year}`
+  ];
+  
+  const gearQueries = [
+    `new music production gear ${month + 1}/${year}`,
+    `audio interface releases ${year}`,
+    `studio monitor reviews ${month + 1} ${year}`,
+    `MIDI controller latest models ${year}`,
+    `synthesizer new releases ${month + 1}/${year}`,
+    `microphones for home studio ${year}`,
+    `DAW updates ${month + 1} ${year}`,
+    `music production hardware ${year}`
+  ];
+  
+  const newsQueries = [
+    `music industry news ${month + 1}/${year}`,
+    `streaming services updates ${year}`,
+    `music copyright laws ${month + 1} ${year}`,
+    `artist revenue trends ${year}`,
+    `music marketing strategies ${month + 1}/${year}`,
+    `independent musician news ${year}`,
+    `record label developments ${month + 1} ${year}`,
+    `music distribution platforms ${year}`
+  ];
+  
+  const trendingQueries = [
+    `viral music production trends ${month + 1}/${year}`,
+    `what producers are talking about ${year}`,
+    `emerging music technologies ${month + 1} ${year}`,
+    `music production on social media ${year}`,
+    `creative workflows ${month + 1}/${year}`,
+    `music collaboration tools ${year}`,
+    `home studio setup trends ${month + 1} ${year}`,
+    `music education online ${year}`
+  ];
+  
+  // Rotate queries based on day
+  const dayIndex = dayOfMonth % 8;
+  const weekIndex = weekOfYear % 8;
+  const dayOfWeekIndex = dayOfWeek;
+  
+  // Generate 4 unique queries with rotating selection
+  const queries = [
+    aiToolsQueries[(dayIndex + dayOfWeekIndex) % aiToolsQueries.length],
+    gearQueries[(dayIndex + weekIndex) % gearQueries.length],
+    newsQueries[(dayOfMonth + dayOfWeekIndex) % newsQueries.length],
+    trendingQueries[(dayIndex + month) % trendingQueries.length]
+  ];
+  
+  console.log(`\n📅 Date: ${now.toISOString().split('T')[0]}`);
+  console.log(`🎯 Theme: ${theme}`);
+  console.log(`🔍 Generated queries:`, queries);
+  
+  return {
+    queries,
+    theme,
+    dateInfo: {
+      dayOfWeek: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek],
+      dayOfMonth,
+      month: month + 1,
+      year
+    }
+  };
+}
 
 // Outline types with emojis
 const OUTLINE_TYPES = [
@@ -75,26 +162,12 @@ export default async function handler(request) {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'SoundSwap AI',
-      version: '3.0 - PAA → H3 Integration',
-      endpoints: {
-        interactions: '/api/interactions',
-        scout: '/api/scout',
-        'scout-direct': '/api/scout-direct (POST for GitHub Actions)',
-        health: '/health'
-      }
-    }), { status: 200, headers });
-  }
-  
-  if (pathname === '/' && request.method === 'GET') {
-    return new Response(JSON.stringify({
-      status: 'online',
-      service: 'SoundSwap AI Blog Generator',
-      version: '3.0 - PAA → H3 Integration',
+      version: '4.0 - Enhanced Query Rotation',
       features: [
-        'Daily topic selection (choose 1 of 4)',
+        'Dynamic daily topic rotation',
+        'AI Tools + Gear + News focus',
         'PAA questions → H3 headers',
-        'Semantic SEO blog generation',
-        'Real-time sentiment analysis'
+        'Monthly themes to prevent repetition'
       ],
       commands: [
         '/blog - Generate daily semantic SEO blog',
@@ -102,6 +175,28 @@ export default async function handler(request) {
         '/outlines [topic] - Legacy outline generator'
       ],
       daily_limit: '1 blog per day for maximum SEO impact'
+    }), { status: 200, headers });
+  }
+  
+  if (pathname === '/' && request.method === 'GET') {
+    const { queries, theme } = generateDailyQueries();
+    return new Response(JSON.stringify({
+      status: 'online',
+      service: 'SoundSwap AI Blog Generator',
+      version: '4.0 - Enhanced Query Rotation',
+      daily_theme: theme,
+      today_queries: queries.slice(0, 2),
+      features: [
+        'Dynamic daily topic selection (rotating queries)',
+        'Focus: AI Tools, Music Gear, Industry News',
+        'PAA questions → H3 headers',
+        'Real-time sentiment analysis'
+      ],
+      indexed_stats: 'Previous blogs indexed in <5 hours',
+      commands: [
+        '/blog - Generate daily semantic SEO blog',
+        '/outlines [topic] - Generate 4 blog outlines'
+      ]
     }), { status: 200, headers });
   }
 
@@ -172,7 +267,7 @@ async function handleDiscordInteraction(request) {
       // Handle /outlines command
       if (commandName === 'outlines') {
         const topic = data?.options?.find(opt => opt.name === 'topic')?.value || 
-                     'latest music production trends 2026';
+                     'latest AI music production trends 2026';
         
         console.log(`Processing outlines for topic: ${topic}`);
         
@@ -272,11 +367,11 @@ async function handleDirectScout(request) {
     }
     
     // Execute scout synchronously
-    const result = await runDailyScout();
+    const result = await runEnhancedDailyScout();
     
     return new Response(JSON.stringify({ 
       status: 'completed', 
-      message: 'Daily scout completed successfully',
+      message: 'Enhanced daily scout completed successfully',
       timestamp: new Date().toISOString(),
       result: result
     }), { 
@@ -302,27 +397,31 @@ async function handleDirectScout(request) {
  */
 async function processBlogCommand(token, data) {
   try {
-    await editOriginalResponse(token, "🎸 **Loading daily topics...**");
+    await editOriginalResponse(token, "🎸 **Loading today's dynamic topics...**");
     
     console.log('Getting SERP data for all topics...');
+    const { queries, theme, dateInfo } = generateDailyQueries();
     const dailyTopics = [];
     
     // Get SERP data for all queries
-    for (const query of NICHE_QUERIES) {
+    for (const query of queries) {
       try {
-        const serpData = await getSerpData(query);
+        const serpData = await getEnhancedSerpData(query, {
+          isNews: query.toLowerCase().includes('news')
+        });
         dailyTopics.push(serpData);
-        console.log(`Got data for: ${query}`);
+        console.log(`Got data for: ${query.slice(0, 40)}...`);
       } catch (error) {
         console.error(`Error getting data for ${query}:`, error);
         dailyTopics.push({
           query,
-          score: 50,
+          category: 'ERROR',
+          score: 40,
           link: 'No link found',
           title: '',
           snippet: '',
           questions: [],
-          status: '📊 STEADY'
+          status: '❌ ERROR'
         });
       }
     }
@@ -331,19 +430,27 @@ async function processBlogCommand(token, data) {
     userSessions.set(token, {
       step: 'topic_selection',
       topics: dailyTopics,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      theme,
+      dateInfo
     });
     
     // Build topic selection message
-    let message = "🎸 **DAILY BLOG TOPIC SELECTION**\n\n";
+    let message = `🎸 **SOUNDSWAP DAILY BLOG TOPICS**\n`;
+    message += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
+    message += `🎯 Theme: ${theme}\n\n`;
     message += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
+    // Sort by score for better presentation
+    dailyTopics.sort((a, b) => b.score - a.score);
+    
     dailyTopics.forEach((topic, index) => {
-      const emoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"][index];
+      const emoji = ["🔥", "📈", "🎯", "⚡"][index] || "📝";
+      const categoryEmoji = topic.category || '📝';
       const paaPreview = topic.questions?.length > 0 ? 
-        `${topic.questions[0].slice(0, 40)}...` : "What producers need to know";
+        `${topic.questions[0].slice(0, 50)}...` : "What music creators need to know";
       
-      message += `${emoji} **${topic.query.slice(0, 40)}...**\n`;
+      message += `${emoji} **${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
       message += `   📊 ${topic.score}/100 ${topic.status}\n`;
       message += `   🔗 ${topic.link.slice(0, 50)}...\n`;
       message += `   ❓ ${paaPreview}\n\n`;
@@ -368,11 +475,14 @@ async function processOutlinesCommand(token, topic) {
     await editOriginalResponse(token, "🤖 **Generating 4 blog outlines...**");
     
     console.log(`Generating outlines for: ${topic}`);
-    const serpData = await getSerpData(topic.slice(0, 100));
+    const serpData = await getEnhancedSerpData(topic.slice(0, 100), {
+      isNews: topic.toLowerCase().includes('news')
+    });
     const outlines = await generateFourOutlines(topic, serpData);
     
     let message = `🎸 **4 BLOG OUTLINES FOR:** ${topic.slice(0, 50)}...\n\n`;
     message += `📊 Trend: ${serpData.score}/100 ${serpData.status}\n`;
+    message += `🏷️ Category: ${serpData.category}\n`;
     message += `🔗 Source: ${serpData.link.slice(0, 50)}...\n\n`;
     
     outlines.forEach((outline, index) => {
@@ -396,24 +506,29 @@ async function processOutlinesCommand(token, topic) {
 }
 
 /**
- * Run the daily scout process
+ * Run the enhanced daily scout process
  */
-async function runDailyScout() {
+async function runEnhancedDailyScout() {
   try {
-    console.log('Executing daily scout...');
+    console.log('Executing enhanced daily scout...');
     
+    // Generate dynamic queries
+    const { queries, theme, dateInfo } = generateDailyQueries();
     const dailyTopics = [];
     
     // Get SERP data for each query
-    for (let i = 0; i < NICHE_QUERIES.length; i++) {
-      const query = NICHE_QUERIES[i];
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
       try {
-        const serpData = await getSerpData(query);
+        const serpData = await getEnhancedSerpData(query, {
+          isNews: query.toLowerCase().includes('news')
+        });
         dailyTopics.push({
           ...serpData,
           index: i
         });
-        console.log(`Got data for query ${i + 1}: ${query}`);
+        console.log(`Got data for query ${i + 1}: ${query.slice(0, 40)}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limiting
       } catch (error) {
         console.error(`Error processing query "${query}":`, error);
       }
@@ -421,219 +536,271 @@ async function runDailyScout() {
     
     // Build report
     const dateStr = new Date().toISOString().split('T')[0];
-    let report = `🎸 **SOUNDSWAP DAILY BLOG TOPICS** (${dateStr})\n\n`;
+    let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
+    report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
+    report += `🎯 Monthly Theme: ${theme}\n\n`;
     report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
+    
+    // Sort by score for better presentation
+    dailyTopics.sort((a, b) => b.score - a.score);
     
     for (let i = 0; i < dailyTopics.length; i++) {
       const topic = dailyTopics[i];
-      const emoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"][i];
+      const emoji = ["🔥", "📈", "🎯", "⚡"][i] || "📝";
+      const categoryEmoji = topic.category;
       const paaPreview = topic.questions?.length > 0 ? 
-        `${topic.questions[0].slice(0, 40)}...` : "What producers need to know";
+        `${topic.questions[0].slice(0, 50)}...` : "What music creators need to know";
       
-      report += `${emoji} **${topic.query.toUpperCase()}**\n`;
-      report += `   📊 Trend: ${topic.score}/100 ${topic.status}\n`;
-      report += `   🔗 Source: ${topic.link.slice(0, 50)}...\n`;
-      report += `   ❓ PAA: ${paaPreview}\n\n`;
+      report += `${emoji} **${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
+      report += `   📊 Trend Score: ${topic.score}/100 ${topic.status}\n`;
+      report += `   🏷️ Source: ${topic.source || 'Various'}\n`;
+      report += `   🔗 Reference: ${topic.link.slice(0, 60)}...\n`;
+      report += `   ❓ Top PAA: ${paaPreview}\n\n`;
     }
     
-    report += "━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-    report += "**TO GENERATE BLOG:**\n";
+    report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    report += "**💡 BLOG GENERATION INSTRUCTIONS:**\n";
     report += "1. Type `/blog` in this channel\n";
-    report += "2. Choose topic (1-4)\n";
-    report += "3. Choose outline style\n";
-    report += "4. Get semantic SEO blog with PAA → H3 headers!\n\n";
-    report += "⏱️ *Only 1 blog per day for maximum SEO impact*";
+    report += "2. Choose topic number (1-4)\n";
+    report += "3. Select outline style\n";
+    report += "4. Get full semantic SEO blog with PAA → H3 headers!\n\n";
+    report += "**🎯 TODAY'S FOCUS AREAS:**\n";
+    report += "- 🤖 AI Tools for Music Production\n";
+    report += "- 🎛️ Latest Music Gear & Hardware\n";
+    report += "- 📰 Music Industry News & Trends\n";
+    report += "- 🎚️ Creative Production Techniques\n\n";
+    report += "⏱️ *Only 1 high-quality blog per day for maximum SEO impact*\n";
+    report += "✅ *Previous blogs indexed in <5 hours*";
     
     // Send to Discord
     await sendToDiscordChannel(report);
     
-    console.log('Daily scout completed successfully');
+    console.log('Enhanced daily scout completed successfully');
     
     return {
       success: true,
+      date: dateStr,
+      theme,
       topicsProcessed: dailyTopics.length,
       discordSent: true,
+      topics: dailyTopics.map(t => ({
+        query: t.query,
+        score: t.score,
+        category: t.category
+      })),
       timestamp: new Date().toISOString()
     };
     
   } catch (error) {
-    console.error('Scout execution error:', error);
+    console.error('Enhanced scout execution error:', error);
     throw error;
   }
 }
 
 /**
- * SERP API Functions - FIXED VERSION
+ * Enhanced SERP API Function
  */
-async function getSerpData(query) {
+async function getEnhancedSerpData(query, context = {}) {
   try {
-    console.log(`Fetching SERP data for: ${query}`);
+    console.log(`🔍 Fetching enhanced SERP data for: ${query}`);
     
-    // Get search results with better parameters
-    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=qdr:d&num=10&api_key=${SERPAPI_KEY}`;
+    // Add freshness modifier based on context
+    const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w'; // day for news, week for others
+    
+    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&api_key=${SERPAPI_KEY}`;
     const searchResponse = await fetch(searchUrl);
     const searchData = await searchResponse.json();
     
-    console.log(`SERP API response received for: ${query}`);
+    console.log(`✅ Enhanced SERP data received for: ${query.slice(0, 40)}...`);
     
     // Extract organic results
     const organic = searchData.organic_results || [];
     
-    // Filter out social media and low-quality domains
+    // Filter out unwanted domains
     const excludedDomains = [
       'facebook.com', 'twitter.com', 'instagram.com', 
       'youtube.com', 'reddit.com', 'tiktok.com',
       'pinterest.com', 'linkedin.com', 'quora.com',
-      'wikipedia.org', 'yelp.com', 'amazon.com'
+      'wikipedia.org', 'yelp.com', 'amazon.com',
+      'ebay.com', 'etsy.com', 'spotify.com'
     ];
     
-    // Find a high-quality result
-    let firstResult = {};
+    // Find high-quality results
+    let bestResult = {};
+    let secondaryResult = {};
+    
     for (const result of organic) {
-      if (!result.link) continue;
+      if (!result.link || !result.title) continue;
       
       try {
         const url = new URL(result.link);
         const hostname = url.hostname.toLowerCase();
         
-        // Check if domain is excluded
+        // Skip excluded domains
         if (excludedDomains.some(domain => hostname.includes(domain))) {
           continue;
         }
         
-        // Prefer certain high-quality domains
-        const preferredDomains = [
+        // Quality scoring system
+        let qualityScore = 0;
+        
+        // Premium domains get highest priority
+        const premiumDomains = [
           'musictech.com', 'musically.com', 'digitalmusicnews.com',
           'billboard.com', 'rollingstone.com', 'nme.com',
-          'variety.com', 'theguardian.com', 'nytimes.com',
-          'techcrunch.com', 'wired.com', 'theverge.com',
-          'soundonsound.com', 'musicradar.com', 'producerspot.com'
+          'variety.com', 'soundonsound.com', 'musicradar.com',
+          'producerspot.com', 'attackmagazine.com', 'futuremusic.com',
+          'thewire.co.uk', 'residentadvisor.net', 'mixmag.net'
         ];
         
-        // Check if this is a preferred domain
-        const isPreferred = preferredDomains.some(domain => hostname.includes(domain));
+        const industryDomains = [
+          'theverge.com', 'techcrunch.com', 'wired.com',
+          'engadget.com', 'arstechnica.com', 'gizmodo.com',
+          'forbes.com', 'businessinsider.com', 'bloomberg.com',
+          'reuters.com', 'apnews.com', 'bbc.com'
+        ];
         
-        if (result.title && result.snippet && (isPreferred || !firstResult.title)) {
-          firstResult = result;
-          if (isPreferred) break; // Found a preferred domain, use it
+        if (premiumDomains.some(domain => hostname.includes(domain))) {
+          qualityScore += 30;
+        } else if (industryDomains.some(domain => hostname.includes(domain))) {
+          qualityScore += 20;
         }
+        
+        // Content quality checks
+        if (result.title.length > 20 && result.title.length < 100) qualityScore += 10;
+        if (result.snippet && result.snippet.length > 100) qualityScore += 15;
+        if (result.date) qualityScore += 10; // Has publication date
+        
+        // Update best result if higher quality
+        if (qualityScore > (bestResult.qualityScore || 0)) {
+          if (bestResult.title) {
+            secondaryResult = { ...bestResult };
+          }
+          bestResult = {
+            ...result,
+            qualityScore,
+            hostname
+          };
+        } else if (qualityScore > (secondaryResult.qualityScore || 0)) {
+          secondaryResult = {
+            ...result,
+            qualityScore,
+            hostname
+          };
+        }
+        
       } catch (e) {
-        console.log(`Invalid URL: ${result.link}`);
+        // Invalid URL, skip
       }
     }
     
-    // If no result found, use first organic result
-    if (!firstResult.title && organic.length > 0) {
-      firstResult = organic[0];
-    }
+    // Use best result, fallback to first organic
+    const firstResult = bestResult.title ? bestResult : (organic[0] || {});
     
-    // Extract People Also Ask questions - FIXED
+    // Extract People Also Ask questions
     let questions = [];
-    
-    // Method 1: Check for related_questions array
-    if (searchData.related_questions && Array.isArray(searchData.related_questions)) {
-      questions = searchData.related_questions
-        .slice(0, 5)
-        .map(q => q.question || q)
-        .filter(q => q && typeof q === 'string' && q.trim().length > 0);
-    }
-    
-    // Method 2: Check for related_questions_and_answers
-    if (questions.length === 0 && searchData.related_questions_and_answers) {
-      questions = searchData.related_questions_and_answers
-        .slice(0, 5)
-        .map(item => {
-          if (typeof item === 'string') return item;
-          if (item.question) return item.question;
-          if (item.title) return item.title;
-          return null;
-        })
-        .filter(q => q && typeof q === 'string' && q.trim().length > 0);
-    }
-    
-    // Method 3: Check for inline_questions (sometimes present)
-    if (questions.length === 0 && searchData.inline_questions) {
-      questions = searchData.inline_questions
-        .slice(0, 5)
-        .map(q => q.question || q)
-        .filter(q => q && typeof q === 'string' && q.trim().length > 0);
-    }
-    
-    // Method 4: If still no questions, extract from snippet or generate fallbacks
-    if (questions.length === 0) {
-      const fallbackQuestions = [
-        `What are the latest developments in ${query.split(' ').slice(0, 3).join(' ')}?`,
-        `How is ${query.split(' ').slice(0, 2).join(' ')} changing the music industry?`,
-        `What do producers need to know about ${query.split(' ').slice(0, 2).join(' ')}?`,
-        `How can artists benefit from ${query.split(' ').slice(0, 2).join(' ')}?`,
-        `What are the key trends in ${query.split(' ').slice(0, 3).join(' ')}?`
-      ];
-      questions = fallbackQuestions.slice(0, 3);
-    }
-    
-    // Calculate trend score based on multiple factors
-    let trendScore = 50; // Base score
-    
-    // Factor 1: Recency (recent articles get higher score)
-    trendScore += 20;
-    
-    // Factor 2: Number of results
-    const totalResults = searchData.search_information?.total_results || 0;
-    if (totalResults > 1000000) trendScore += 10;
-    if (totalResults > 10000000) trendScore += 5;
-    
-    // Factor 3: Domain authority (if from preferred domain)
-    try {
-      const url = new URL(firstResult.link || '');
-      const hostname = url.hostname.toLowerCase();
-      const preferredDomains = [
-        'musictech.com', 'musically.com', 'digitalmusicnews.com',
-        'billboard.com', 'rollingstone.com', 'nme.com'
-      ];
-      if (preferredDomains.some(domain => hostname.includes(domain))) {
-        trendScore += 15;
-      }
-    } catch (e) {
-      // Ignore URL parsing errors
-    }
-    
-    // Ensure score is between 50-100
-    trendScore = Math.min(Math.max(trendScore, 50), 100);
-    
-    let status = '📊 STEADY';
-    if (trendScore > 75) status = '🔥 VIRAL';
-    else if (trendScore > 50) status = '📈 TRENDING';
-    
-    return {
-      query,
-      score: Math.round(trendScore),
-      link: firstResult.link || 'https://example.com/no-link-found',
-      title: firstResult.title || 'No title available',
-      snippet: firstResult.snippet || 'No snippet available',
-      questions: questions.slice(0, 5),
-      status,
-      total_results: totalResults
-    };
-  } catch (error) {
-    console.error('SERP API error:', error);
-    // Generate better fallback data
-    const fallbackQuestions = [
-      `What are the latest trends in ${query.split(' ').slice(0, 3).join(' ')}?`,
-      `How is ${query.split(' ').slice(0, 2).join(' ')} impacting music production?`,
-      `What should producers know about ${query.split(' ').slice(0, 2).join(' ')}?`,
-      `How can artists use ${query.split(' ').slice(0, 2).join(' ')} effectively?`,
-      `What are the benefits of ${query.split(' ').slice(0, 2).join(' ')} for musicians?`
+    const questionSources = [
+      searchData.related_questions,
+      searchData.related_questions_and_answers,
+      searchData.inline_questions,
+      searchData.organic_results?.[0]?.related_questions
     ];
     
+    for (const source of questionSources) {
+      if (Array.isArray(source) && source.length > 0) {
+        source.slice(0, 5).forEach(item => {
+          if (item.question) questions.push(item.question);
+          else if (typeof item === 'string') questions.push(item);
+        });
+        if (questions.length >= 3) break;
+      }
+    }
+    
+    // Generate context-relevant fallback questions
+    if (questions.length < 3) {
+      const queryWords = query.toLowerCase().split(' ').slice(0, 4);
+      const fallbacks = [
+        `What are the latest developments in ${queryWords.slice(0, 3).join(' ')}?`,
+        `How is ${queryWords.slice(0, 2).join(' ')} impacting modern music production?`,
+        `What should producers know about ${queryWords.slice(0, 2).join(' ')} in ${new Date().getFullYear()}?`,
+        `How can artists use ${queryWords.slice(0, 2).join(' ')} to improve their workflow?`,
+        `What are the benefits of ${queryWords.slice(0, 2).join(' ')} for independent musicians?`
+      ];
+      questions = [...questions, ...fallbacks.slice(0, 5 - questions.length)];
+    }
+    
+    // Remove duplicates
+    questions = [...new Set(questions)].slice(0, 5);
+    
+    // Calculate trend score with enhanced metrics
+    let trendScore = 40; // Base score
+    
+    // Recency bonus
+    trendScore += 25;
+    
+    // Volume bonus
+    const totalResults = searchData.search_information?.total_results || 0;
+    if (totalResults > 1000000) trendScore += 10;
+    if (totalResults > 5000000) trendScore += 5;
+    if (totalResults > 10000000) trendScore += 5;
+    
+    // Quality bonus
+    if (firstResult.qualityScore > 30) trendScore += 15;
+    else if (firstResult.qualityScore > 20) trendScore += 10;
+    else if (firstResult.qualityScore > 10) trendScore += 5;
+    
+    // Questions bonus (indicates search interest)
+    if (questions.length >= 3) trendScore += 5;
+    
+    // Clamp score
+    trendScore = Math.min(Math.max(trendScore, 40), 95);
+    
+    // Determine status
+    let status = '📊 STEADY';
+    if (trendScore > 75) status = '🔥 VIRAL';
+    else if (trendScore > 60) status = '📈 TRENDING';
+    
+    // Categorize the topic
+    let category = 'OTHER';
+    const queryLower = query.toLowerCase();
+    if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
+    else if (queryLower.includes('gear') || queryLower.includes('hardware') || queryLower.includes('equipment')) category = '🎛️ GEAR';
+    else if (queryLower.includes('news') || queryLower.includes('industry') || queryLower.includes('trend')) category = '📰 NEWS';
+    else if (queryLower.includes('production') || queryLower.includes('studio') || queryLower.includes('recording')) category = '🎚️ PRODUCTION';
+    
     return {
       query,
-      score: 50,
+      category,
+      score: Math.round(trendScore),
+      link: firstResult.link || 'https://example.com/no-link-found',
+      title: firstResult.title || `Latest updates: ${query.slice(0, 50)}`,
+      snippet: firstResult.snippet || `Stay informed about ${query.slice(0, 30)}...`,
+      questions,
+      status,
+      total_results: totalResults,
+      quality_score: firstResult.qualityScore || 0,
+      source: firstResult.hostname || 'unknown'
+    };
+    
+  } catch (error) {
+    console.error(`❌ Enhanced SERP API error for "${query}":`, error.message);
+    
+    return {
+      query,
+      category: 'ERROR',
+      score: 40,
       link: 'https://example.com/no-link-found',
-      title: `Latest updates on ${query}`,
-      snippet: `Stay informed about the latest developments in ${query}`,
-      questions: fallbackQuestions.slice(0, 3),
-      status: '📊 STEADY',
-      total_results: 0
+      title: `Error fetching data for: ${query.slice(0, 40)}`,
+      snippet: `Unable to retrieve information. Please try again or check the logs.`,
+      questions: [
+        `What is the latest in ${query.split(' ').slice(0, 2).join(' ')}?`,
+        `How does ${query.split(' ').slice(0, 2).join(' ')} affect music production?`,
+        `What are the trends in ${query.split(' ').slice(0, 2).join(' ')}?`
+      ],
+      status: '❌ ERROR',
+      total_results: 0,
+      quality_score: 0,
+      source: 'error'
     };
   }
 }
@@ -650,6 +817,7 @@ async function generateFourOutlines(context, serpData) {
       
       SERP DATA:
       - Topic: ${serpData.query}
+      - Category: ${serpData.category}
       - Trend Score: ${serpData.score}/100 (${serpData.status})
       - Source: ${serpData.title}
       - People Also Ask: ${serpData.questions ? serpData.questions.slice(0, 3).join(', ') : 'No questions found'}
@@ -666,6 +834,8 @@ async function generateFourOutlines(context, serpData) {
       - Target audience
       - 2-3 key talking points
       - Estimated reading time
+      
+      IMPORTANT: Convert PAA questions into H3 header suggestions.
       
       Format your response clearly with numbered outlines.
       
@@ -687,7 +857,7 @@ async function generateFourOutlines(context, serpData) {
 function parseOutlines(text) {
   const outlines = [];
   
-  // Simple parsing - in production you'd want more robust parsing
+  // Simple parsing
   const lines = text.split('\n');
   let currentOutline = null;
   
@@ -697,7 +867,7 @@ function parseOutlines(text) {
       currentOutline = { 
         type: 'Technical Deep Dive', 
         content: line,
-        sentiment: '😊 POSITIVE'
+        sentiment: '🔬 TECHNICAL'
       };
     } else if (line.includes('2.') || line.includes('Creative Applications')) {
       if (currentOutline) outlines.push(currentOutline);
@@ -733,7 +903,7 @@ function parseOutlines(text) {
     outlines.push({
       type: type.name,
       content: `${type.description} for this topic.`,
-      sentiment: outlines.length % 2 === 0 ? '😊 POSITIVE' : '📊 NEUTRAL'
+      sentiment: outlines.length % 2 === 0 ? '🔬 TECHNICAL' : '🎨 CREATIVE'
     });
   }
   
@@ -745,7 +915,7 @@ function getFallbackOutlines(context) {
     {
       type: 'Technical Deep Dive',
       content: `Technical specifications and features analysis for ${context.slice(0, 30)}...`,
-      sentiment: '😊 POSITIVE'
+      sentiment: '🔬 TECHNICAL'
     },
     {
       type: 'Creative Applications',
@@ -790,7 +960,7 @@ async function sendToDiscordChannel(content) {
   try {
     const url = `https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages`;
     
-    console.log('Sending message to Discord channel...');
+    console.log('📤 Sending message to Discord channel...');
     
     const response = await fetch(url, {
       method: 'POST',
@@ -806,10 +976,10 @@ async function sendToDiscordChannel(content) {
       console.error(`Failed to send to Discord channel: ${response.status} ${errorText}`);
       throw new Error(`Discord API error: ${response.status}`);
     } else {
-      console.log('Message sent to Discord successfully');
+      console.log('✅ Message sent to Discord successfully');
     }
   } catch (error) {
-    console.error('Failed to send to Discord channel:', error);
+    console.error('❌ Failed to send to Discord channel:', error);
     throw error;
   }
 }
