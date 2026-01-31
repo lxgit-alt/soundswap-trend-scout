@@ -71,15 +71,15 @@ jobs:
             echo "⚠ CRON_SECRET is not set (optional for direct API call)"
           fi
 
-      - name: Run Enhanced Daily Scout
+      - name: Run Enhanced Daily Scout with AI APIs
         id: scout
         continue-on-error: true
         run: |
-          echo "🚀 Starting enhanced daily scout script..."
+          echo "🚀 Starting enhanced daily scout script with AI APIs..."
           echo "Current directory: $(pwd)"
           echo "Node version: $(node --version)"
           
-          # Create enhanced scout script with rotating queries
+          # Create enhanced scout script with AI Mode and AI Overview APIs
           cat > scout-runner.js << 'EOF'
           import fetch from 'node-fetch';
           
@@ -184,18 +184,168 @@ jobs:
             };
           }
           
-          async function getSerpData(query, context = {}) {
+          // Google AI Mode API - For AI-generated search results
+          async function getGoogleAIModeData(query) {
             try {
-              console.log(`🔍 Fetching SERP data for: ${query}`);
+              console.log(`🤖 Fetching Google AI Mode data for: ${query.slice(0, 40)}...`);
               
+              const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+              const response = await fetch(url);
+              const data = await response.json();
+              
+              if (data.error) {
+                console.log(`❌ Google AI Mode API error: ${data.error}`);
+                return null;
+              }
+              
+              console.log(`✅ Google AI Mode data received`);
+              return data;
+            } catch (error) {
+              console.error(`❌ Google AI Mode API failed:`, error.message);
+              return null;
+            }
+          }
+          
+          // Google AI Overview API - For AI Overview blocks
+          async function getGoogleAIOverviewData(query) {
+            try {
+              console.log(`🧠 Fetching Google AI Overview data for: ${query.slice(0, 40)}...`);
+              
+              const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+              const response = await fetch(url);
+              const data = await response.json();
+              
+              if (data.error) {
+                console.log(`❌ Google AI Overview API error: ${data.error}`);
+                return null;
+              }
+              
+              console.log(`✅ Google AI Overview data received`);
+              return data;
+            } catch (error) {
+              console.error(`❌ Google AI Overview API failed:`, error.message);
+              return null;
+            }
+          }
+          
+          // Main SERP data function with AI APIs
+          async function getEnhancedSerpData(query, context = {}) {
+            try {
+              console.log(`🔍 Fetching enhanced SERP data for: ${query}`);
+              
+              // Parallel API calls for better performance
+              const [regularData, aiModeData, aiOverviewData] = await Promise.allSettled([
+                getRegularSerpData(query, context),
+                getGoogleAIModeData(query),
+                getGoogleAIOverviewData(query)
+              ]);
+              
+              const searchData = regularData.status === 'fulfilled' ? regularData.value : null;
+              const aiMode = aiModeData.status === 'fulfilled' ? aiModeData.value : null;
+              const aiOverview = aiOverviewData.status === 'fulfilled' ? aiOverviewData.value : null;
+              
+              if (!searchData) {
+                throw new Error('Failed to get regular search data');
+              }
+              
+              // Combine AI data with regular data
+              let combinedQuestions = [...(searchData.questions || [])];
+              let aiInsights = [];
+              
+              // Extract from AI Mode
+              if (aiMode && aiMode.organic_results) {
+                // Get AI-generated summaries
+                const aiResults = aiMode.organic_results.slice(0, 3).filter(r => r.snippet);
+                aiInsights = aiResults.map(r => r.snippet);
+                
+                // Extract questions from AI Mode
+                if (aiMode.related_questions) {
+                  const aiQuestions = aiMode.related_questions
+                    .slice(0, 5)
+                    .map(q => q.question || q)
+                    .filter(q => q && typeof q === 'string');
+                  combinedQuestions = [...combinedQuestions, ...aiQuestions];
+                }
+              }
+              
+              // Extract from AI Overview
+              if (aiOverview && aiOverview.ai_overview) {
+                const overview = aiOverview.ai_overview;
+                if (overview.text) {
+                  aiInsights.push(overview.text.substring(0, 200) + '...');
+                }
+                
+                if (overview.questions) {
+                  const overviewQuestions = overview.questions
+                    .slice(0, 5)
+                    .map(q => q.question || q)
+                    .filter(q => q && typeof q === 'string');
+                  combinedQuestions = [...combinedQuestions, ...overviewQuestions];
+                }
+              }
+              
+              // Remove duplicates and limit
+              const uniqueQuestions = [...new Set(combinedQuestions)].slice(0, 7);
+              
+              // Calculate enhanced trend score with AI bonus
+              let trendScore = searchData.score || 40;
+              
+              // AI data bonus
+              if (aiMode || aiOverview) {
+                trendScore += 15; // Bonus for having AI-generated content
+                console.log(`✨ AI data bonus applied for: ${query.slice(0, 40)}...`);
+              }
+              
+              // Multiple AI sources bonus
+              if (aiMode && aiOverview) {
+                trendScore += 10;
+              }
+              
+              // AI insights bonus
+              if (aiInsights.length > 0) {
+                trendScore += Math.min(aiInsights.length * 3, 15);
+              }
+              
+              // Determine status
+              let status = '📊 STEADY';
+              if (trendScore > 75) status = '🔥 VIRAL';
+              else if (trendScore > 60) status = '📈 TRENDING';
+              
+              if (aiMode || aiOverview) {
+                status = '🤖 ' + status; // Add AI indicator
+              }
+              
+              return {
+                query,
+                category: searchData.category,
+                score: Math.min(Math.round(trendScore), 100),
+                link: searchData.link,
+                title: searchData.title,
+                snippet: searchData.snippet,
+                questions: uniqueQuestions,
+                status,
+                total_results: searchData.total_results,
+                quality_score: searchData.quality_score,
+                source: searchData.source,
+                ai_enhanced: !!(aiMode || aiOverview),
+                ai_insights: aiInsights.slice(0, 2)
+              };
+              
+            } catch (error) {
+              console.error(`❌ Enhanced SERP error for "${query}":`, error.message);
+              return getFallbackSerpData(query);
+            }
+          }
+          
+          // Regular SERP data function
+          async function getRegularSerpData(query, context = {}) {
+            try {
               // Add freshness modifier based on context
-              const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w'; // day for news, week for others
+              const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w';
               
               const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&api_key=${SERPAPI_KEY}`;
               const searchResponse = await fetch(searchUrl);
               const searchData = await searchResponse.json();
-              
-              console.log(`✅ SERP data received for: ${query.slice(0, 40)}...`);
               
               // Extract organic results
               const organic = searchData.organic_results || [];
@@ -211,7 +361,7 @@ jobs:
               
               // Find high-quality results
               let bestResult = {};
-              let secondaryResult = {};
+              let qualityScore = 0;
               
               for (const result of organic) {
                 if (!result.link || !result.title) continue;
@@ -225,8 +375,7 @@ jobs:
                     continue;
                   }
                   
-                  // Quality scoring system
-                  let qualityScore = 0;
+                  let currentScore = 0;
                   
                   // Premium domains get highest priority
                   const premiumDomains = [
@@ -245,32 +394,22 @@ jobs:
                   ];
                   
                   if (premiumDomains.some(domain => hostname.includes(domain))) {
-                    qualityScore += 30;
+                    currentScore += 30;
                   } else if (industryDomains.some(domain => hostname.includes(domain))) {
-                    qualityScore += 20;
+                    currentScore += 20;
                   }
                   
                   // Content quality checks
-                  if (result.title.length > 20 && result.title.length < 100) qualityScore += 10;
-                  if (result.snippet && result.snippet.length > 100) qualityScore += 15;
-                  if (result.date) qualityScore += 10; // Has publication date
+                  if (result.title.length > 20 && result.title.length < 100) currentScore += 10;
+                  if (result.snippet && result.snippet.length > 100) currentScore += 15;
+                  if (result.date) currentScore += 10;
                   
                   // Update best result if higher quality
-                  if (qualityScore > (bestResult.qualityScore || 0)) {
-                    if (bestResult.title) {
-                      secondaryResult = { ...bestResult };
-                    }
-                    bestResult = {
-                      ...result,
-                      qualityScore,
-                      hostname
-                    };
-                  } else if (qualityScore > (secondaryResult.qualityScore || 0)) {
-                    secondaryResult = {
-                      ...result,
-                      qualityScore,
-                      hostname
-                    };
+                  if (currentScore > qualityScore) {
+                    bestResult = result;
+                    qualityScore = currentScore;
+                    bestResult.hostname = hostname;
+                    bestResult.qualityScore = currentScore;
                   }
                   
                 } catch (e) {
@@ -278,8 +417,17 @@ jobs:
                 }
               }
               
-              // Use best result, fallback to first organic
-              const firstResult = bestResult.title ? bestResult : (organic[0] || {});
+              // If no result found, use first organic result
+              if (!bestResult.title && organic.length > 0) {
+                bestResult = organic[0];
+                try {
+                  const url = new URL(bestResult.link || '');
+                  bestResult.hostname = url.hostname;
+                } catch (e) {
+                  bestResult.hostname = 'unknown';
+                }
+                bestResult.qualityScore = 5;
+              }
               
               // Extract People Also Ask questions
               let questions = [];
@@ -300,49 +448,33 @@ jobs:
                 }
               }
               
-              // Generate context-relevant fallback questions
+              // Generate fallback questions if needed
               if (questions.length < 3) {
                 const queryWords = query.toLowerCase().split(' ').slice(0, 4);
                 const fallbacks = [
                   `What are the latest developments in ${queryWords.slice(0, 3).join(' ')}?`,
                   `How is ${queryWords.slice(0, 2).join(' ')} impacting modern music production?`,
                   `What should producers know about ${queryWords.slice(0, 2).join(' ')} in ${new Date().getFullYear()}?`,
-                  `How can artists use ${queryWords.slice(0, 2).join(' ')} to improve their workflow?`,
-                  `What are the benefits of ${queryWords.slice(0, 2).join(' ')} for independent musicians?`
+                  `How can artists use ${queryWords.slice(0, 2).join(' ')} to improve their workflow?`
                 ];
                 questions = [...questions, ...fallbacks.slice(0, 5 - questions.length)];
               }
               
-              // Remove duplicates
-              questions = [...new Set(questions)].slice(0, 5);
+              // Calculate base trend score
+              let trendScore = 40;
+              trendScore += 25; // Recency bonus
               
-              // Calculate trend score with enhanced metrics
-              let trendScore = 40; // Base score
-              
-              // Recency bonus
-              trendScore += 25;
-              
-              // Volume bonus
               const totalResults = searchData.search_information?.total_results || 0;
               if (totalResults > 1000000) trendScore += 10;
               if (totalResults > 5000000) trendScore += 5;
-              if (totalResults > 10000000) trendScore += 5;
               
-              // Quality bonus
-              if (firstResult.qualityScore > 30) trendScore += 15;
-              else if (firstResult.qualityScore > 20) trendScore += 10;
-              else if (firstResult.qualityScore > 10) trendScore += 5;
+              if (qualityScore > 30) trendScore += 15;
+              else if (qualityScore > 20) trendScore += 10;
+              else if (qualityScore > 10) trendScore += 5;
               
-              // Questions bonus (indicates search interest)
               if (questions.length >= 3) trendScore += 5;
               
-              // Clamp score
               trendScore = Math.min(Math.max(trendScore, 40), 95);
-              
-              // Determine status
-              let status = '📊 STEADY';
-              if (trendScore > 75) status = '🔥 VIRAL';
-              else if (trendScore > 60) status = '📈 TRENDING';
               
               // Categorize the topic
               let category = 'OTHER';
@@ -356,37 +488,43 @@ jobs:
                 query,
                 category,
                 score: Math.round(trendScore),
-                link: firstResult.link || 'https://example.com/no-link-found',
-                title: firstResult.title || `Latest updates: ${query.slice(0, 50)}`,
-                snippet: firstResult.snippet || `Stay informed about ${query.slice(0, 30)}...`,
-                questions,
-                status,
+                link: bestResult.link || 'https://example.com/no-link-found',
+                title: bestResult.title || `Latest updates: ${query.slice(0, 50)}`,
+                snippet: bestResult.snippet || `Stay informed about ${query.slice(0, 30)}...`,
+                questions: [...new Set(questions)].slice(0, 5),
                 total_results: totalResults,
-                quality_score: firstResult.qualityScore || 0,
-                source: firstResult.hostname || 'unknown'
+                quality_score: qualityScore,
+                source: bestResult.hostname || 'unknown'
               };
               
             } catch (error) {
-              console.error(`❌ SERP API error for "${query}":`, error.message);
-              
-              return {
-                query,
-                category: 'ERROR',
-                score: 40,
-                link: 'https://example.com/no-link-found',
-                title: `Error fetching data for: ${query.slice(0, 40)}`,
-                snippet: `Unable to retrieve information. Please try again or check the logs.`,
-                questions: [
-                  `What is the latest in ${query.split(' ').slice(0, 2).join(' ')}?`,
-                  `How does ${query.split(' ').slice(0, 2).join(' ')} affect music production?`,
-                  `What are the trends in ${query.split(' ').slice(0, 2).join(' ')}?`
-                ],
-                status: '❌ ERROR',
-                total_results: 0,
-                quality_score: 0,
-                source: 'error'
-              };
+              console.error(`❌ Regular SERP error for "${query}":`, error.message);
+              throw error;
             }
+          }
+          
+          function getFallbackSerpData(query) {
+            const fallbackQuestions = [
+              `What are the latest trends in ${query.split(' ').slice(0, 3).join(' ')}?`,
+              `How is ${query.split(' ').slice(0, 2).join(' ')} impacting music production?`,
+              `What should producers know about ${query.split(' ').slice(0, 2).join(' ')}?`
+            ];
+            
+            return {
+              query,
+              category: 'ERROR',
+              score: 40,
+              link: 'https://example.com/no-link-found',
+              title: `Latest updates on ${query}`,
+              snippet: `Stay informed about the latest developments in ${query}`,
+              questions: fallbackQuestions,
+              status: '❌ ERROR',
+              total_results: 0,
+              quality_score: 0,
+              source: 'error',
+              ai_enhanced: false,
+              ai_insights: []
+            };
           }
           
           async function sendToDiscordChannel(content) {
@@ -418,7 +556,7 @@ jobs:
           
           async function runEnhancedDailyScout() {
             try {
-              console.log('🎯 Starting enhanced daily scout...');
+              console.log('🎯 Starting enhanced daily scout with AI APIs...');
               
               // Generate dynamic queries
               const { queries, theme, dateInfo } = generateDailyQueries();
@@ -428,7 +566,7 @@ jobs:
               for (let i = 0; i < queries.length; i++) {
                 const query = queries[i];
                 try {
-                  const serpData = await getSerpData(query, {
+                  const serpData = await getEnhancedSerpData(query, {
                     isNews: query.toLowerCase().includes('news')
                   });
                   dailyTopics.push({
@@ -436,7 +574,11 @@ jobs:
                     index: i
                   });
                   console.log(`✅ Processed query ${i + 1}: ${query.slice(0, 40)}...`);
-                  await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limiting
+                  
+                  // Rate limiting between queries
+                  if (i < queries.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                  }
                 } catch (error) {
                   console.error(`❌ Error processing query "${query}":`, error);
                 }
@@ -446,7 +588,8 @@ jobs:
               const dateStr = new Date().toISOString().split('T')[0];
               let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
               report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
-              report += `🎯 Monthly Theme: ${theme}\n\n`;
+              report += `🎯 Monthly Theme: ${theme}\n`;
+              report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
               report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
               
               // Sort by score for better presentation
@@ -456,29 +599,34 @@ jobs:
                 const topic = dailyTopics[i];
                 const emoji = ["🔥", "📈", "🎯", "⚡"][i] || "📝";
                 const categoryEmoji = topic.category;
+                const aiBadge = topic.ai_enhanced ? '🤖 ' : '';
                 const paaPreview = topic.questions?.length > 0 ? 
                   `${topic.questions[0].slice(0, 50)}...` : "What music creators need to know";
                 
-                report += `${emoji} **${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
+                report += `${emoji} **${aiBadge}${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
                 report += `   📊 Trend Score: ${topic.score}/100 ${topic.status}\n`;
                 report += `   🏷️ Source: ${topic.source || 'Various'}\n`;
+                if (topic.ai_insights && topic.ai_insights.length > 0) {
+                  report += `   💡 AI Insight: ${topic.ai_insights[0].slice(0, 40)}...\n`;
+                }
                 report += `   🔗 Reference: ${topic.link.slice(0, 60)}...\n`;
                 report += `   ❓ Top PAA: ${paaPreview}\n\n`;
               }
               
               report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+              report += "**🚀 ENHANCED FEATURES:**\n";
+              report += "- 🤖 Google AI Mode API (AI-generated results)\n";
+              report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
+              report += "- 🔍 Multi-source question extraction\n";
+              report += "- 📈 AI-enhanced trend scoring\n\n";
               report += "**💡 BLOG GENERATION INSTRUCTIONS:**\n";
               report += "1. Type `/blog` in this channel\n";
               report += "2. Choose topic number (1-4)\n";
               report += "3. Select outline style\n";
               report += "4. Get full semantic SEO blog with PAA → H3 headers!\n\n";
-              report += "**🎯 TODAY'S FOCUS AREAS:**\n";
-              report += "- 🤖 AI Tools for Music Production\n";
-              report += "- 🎛️ Latest Music Gear & Hardware\n";
-              report += "- 📰 Music Industry News & Trends\n";
-              report += "- 🎚️ Creative Production Techniques\n\n";
               report += "⏱️ *Only 1 high-quality blog per day for maximum SEO impact*\n";
-              report += "✅ *Previous blogs indexed in <5 hours*";
+              report += "✅ *Previous blogs indexed in <5 hours*\n";
+              report += "🤖 *AI-enhanced topics for better search visibility*";
               
               // Send to Discord
               await sendToDiscordChannel(report);
@@ -494,7 +642,8 @@ jobs:
                 topics: dailyTopics.map(t => ({
                   query: t.query,
                   score: t.score,
-                  category: t.category
+                  category: t.category,
+                  ai_enhanced: t.ai_enhanced
                 })),
                 timestamp: new Date().toISOString()
               };
@@ -558,23 +707,23 @@ jobs:
         run: |
           echo "✅ GitHub Actions workflow completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "----------------------------------------"
-          echo "🎯 TODAY'S IMPROVEMENTS:"
-          echo "• Dynamic query rotation prevents repetition"
-          echo "• Enhanced focus on AI tools, gear, news"
-          echo "• Monthly themes for content variety"
-          echo "• Quality scoring for better source selection"
+          echo "🎯 ENHANCED FEATURES:"
+          echo "• Google AI Mode API integration"
+          echo "• Google AI Overview API integration"
+          echo "• Multi-source question extraction"
+          echo "• AI-enhanced trend scoring"
           echo "----------------------------------------"
           echo "📊 Next steps:"
-          echo "1. Check your Discord channel for 4 fresh topics"
-          echo "2. Each day will have different queries"
-          echo "3. Better category focus (AI, Gear, News, Trends)"
-          echo "4. Continue getting blogs indexed in <5 hours"
+          echo "1. Check Discord for AI-enhanced topics"
+          echo "2. Topics now include AI-generated insights"
+          echo "3. Better PAA question extraction"
+          echo "4. Continue rapid Google indexing (<5 hours)"
           echo "----------------------------------------"
           
           # Output status based on exit code
           if [ "${{ steps.scout.outputs.EXIT_CODE }}" = "0" ]; then
-            echo "🎉 Enhanced scout executed successfully!"
-            echo "📈 Topics will rotate daily to prevent repetition"
+            echo "🎉 Enhanced AI scout executed successfully!"
+            echo "🤖 AI APIs are now enriching your daily topics"
           else
             echo "⚠ Scout script may have encountered issues"
             echo "Check the logs above for error details"
