@@ -15,6 +15,16 @@ const {
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
+// Region configurations for multi‑market querying
+const REGIONS = {
+  us: { gl: 'us', domain: 'google.com', name: 'US', emoji: '🇺🇸', weight: 0.4 },
+  de: { gl: 'de', domain: 'google.de', name: 'Germany', emoji: '🇩🇪', weight: 0.3 },
+  uk: { gl: 'uk', domain: 'google.co.uk', name: 'UK', emoji: '🇬🇧', weight: 0.2 }
+};
+
+// Commercial keywords for high‑monetisation detection
+const COMMERCIAL_MODIFIERS = ['best', 'vs', 'review', 'under €', 'top', 'cheap', 'buy', 'price', 'deal'];
+
 // Dynamic query generation based on day of week
 function generateDailyQueries() {
   const now = new Date();
@@ -162,18 +172,18 @@ export default async function handler(request) {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'SoundSwap AI',
-      version: '5.0 - AI Mode + AI Overview APIs',
+      version: '5.1 - Multi‑Market AI Scout',
       features: [
-        'Google AI Mode API integration',
-        'Google AI Overview API integration',
-        'Multi-source question extraction',
-        'AI-enhanced trend scoring',
+        'Multi‑region querying (US, DE, UK)',
+        'Weighted trend scoring (40% US, 30% DE, 20% UK, 10% rising)',
+        'High‑monetisation flag (DE+UK + commercial keywords)',
+        'Google AI Mode & AI Overview APIs per region',
         'Dynamic daily topic rotation'
       ],
       apis_active: [
-        'Regular Google Search',
-        'Google AI Mode (AI-generated results)',
-        'Google AI Overview (AI overview blocks)'
+        'Regular Google Search (per region)',
+        'Google AI Mode (per region)',
+        'Google AI Overview (per region)'
       ],
       commands: [
         '/blog - Generate daily semantic SEO blog',
@@ -188,20 +198,20 @@ export default async function handler(request) {
     return new Response(JSON.stringify({
       status: 'online',
       service: 'SoundSwap AI Blog Generator',
-      version: '5.0 - AI Mode + AI Overview APIs',
+      version: '5.1 - Multi‑Market AI Scout',
       daily_theme: theme,
       today_queries: queries.slice(0, 2),
       features: [
-        'Google AI Mode API integration',
-        'Google AI Overview API integration',
+        'Multi‑region querying (US, DE, UK)',
+        'Weighted trend scoring',
+        'High‑monetisation detection',
         'AI-enhanced trend detection',
-        'Multi-source PAA extraction',
         'Dynamic query rotation'
       ],
       indexed_stats: 'Previous blogs indexed in <5 hours',
       ai_apis: {
-        ai_mode: 'Google AI Mode (AI-generated results)',
-        ai_overview: 'Google AI Overview (AI overview blocks)',
+        ai_mode: 'Google AI Mode (per region)',
+        ai_overview: 'Google AI Overview (per region)',
         uptime: '99.38% - 99.99%'
       }
     }), { status: 200, headers });
@@ -378,7 +388,7 @@ async function handleDirectScout(request) {
     
     return new Response(JSON.stringify({ 
       status: 'completed', 
-      message: 'Enhanced daily scout completed successfully',
+      message: 'Multi‑market daily scout completed successfully',
       timestamp: new Date().toISOString(),
       result: result
     }), { 
@@ -404,20 +414,20 @@ async function handleDirectScout(request) {
  */
 async function processBlogCommand(token, data) {
   try {
-    await editOriginalResponse(token, "🎸 **Loading today's AI-enhanced topics...**");
+    await editOriginalResponse(token, "🎸 **Loading today's multi‑market topics...**");
     
-    console.log('Getting SERP data for all topics...');
+    console.log('Getting multi‑region SERP data for all topics...');
     const { queries, theme, dateInfo } = generateDailyQueries();
     const dailyTopics = [];
     
-    // Get SERP data for all queries
+    // Get multi‑region data for all queries
     for (const query of queries) {
       try {
         const serpData = await getEnhancedSerpData(query, {
           isNews: query.toLowerCase().includes('news')
         });
         dailyTopics.push(serpData);
-        console.log(`Got AI-enhanced data for: ${query.slice(0, 40)}...`);
+        console.log(`Got multi‑market data for: ${query.slice(0, 40)}...`);
       } catch (error) {
         console.error(`Error getting data for ${query}:`, error);
         dailyTopics.push({
@@ -429,7 +439,8 @@ async function processBlogCommand(token, data) {
           snippet: '',
           questions: [],
           status: '❌ ERROR',
-          ai_enhanced: false
+          ai_enhanced: false,
+          regions: {}
         });
       }
     }
@@ -447,22 +458,28 @@ async function processBlogCommand(token, data) {
     let message = `🎸 **SOUNDSWAP DAILY BLOG TOPICS**\n`;
     message += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
     message += `🎯 Theme: ${theme}\n`;
-    message += `🇩🇪 Geo‑targeting: Germany (gl=de)\n`;
-    message += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
+    message += `🌍 Multi‑market: US (40%), Germany (30%), UK (20%) + rising signals (10%)\n`;
+    message += `🤖 AI APIs: Google AI Mode + AI Overview (per region)\n\n`;
     message += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
-    // Sort by score for better presentation
+    // Sort by combined score for better presentation
     dailyTopics.sort((a, b) => b.score - a.score);
     
     dailyTopics.forEach((topic, index) => {
       const emoji = ["🔥", "📈", "🎯", "⚡"][index] || "📝";
       const categoryEmoji = topic.category || '📝';
       const aiBadge = topic.ai_enhanced ? '🤖 ' : '';
+      const monetizationBadge = topic.high_monetization ? '💰 ' : '';
       const paaPreview = topic.questions?.length > 0 ? 
         `${topic.questions[0].slice(0, 50)}...` : "What music creators need to know";
       
-      message += `${emoji} **${aiBadge}${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
-      message += `   📊 ${topic.score}/100 ${topic.status}\n`;
+      message += `${emoji} **${monetizationBadge}${aiBadge}${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
+      message += `   📊 Combined Score: ${topic.score}/100 ${topic.status}\n`;
+      if (topic.regions) {
+        message += `   ${REGIONS.us.emoji} US: ${topic.regions.us?.score || '?'}  `;
+        message += `${REGIONS.de.emoji} DE: ${topic.regions.de?.score || '?'}  `;
+        message += `${REGIONS.uk.emoji} UK: ${topic.regions.uk?.score || '?'}\n`;
+      }
       message += `   🔗 ${topic.link.slice(0, 50)}...\n`;
       message += `   ❓ ${paaPreview}\n\n`;
     });
@@ -483,7 +500,7 @@ async function processBlogCommand(token, data) {
  */
 async function processOutlinesCommand(token, topic) {
   try {
-    await editOriginalResponse(token, "🤖 **Generating AI-enhanced blog outlines...**");
+    await editOriginalResponse(token, "🤖 **Generating multi‑market AI‑enhanced blog outlines...**");
     
     console.log(`Generating outlines for: ${topic}`);
     const serpData = await getEnhancedSerpData(topic.slice(0, 100), {
@@ -491,10 +508,16 @@ async function processOutlinesCommand(token, topic) {
     });
     const outlines = await generateAIEnhancedOutlines(topic, serpData);
     
-    let message = `🎸 **AI-ENHANCED BLOG OUTLINES FOR:** ${topic.slice(0, 50)}...\n\n`;
-    message += `📊 Trend: ${serpData.score}/100 ${serpData.status}\n`;
+    let message = `🎸 **AI‑ENHANCED BLOG OUTLINES FOR:** ${topic.slice(0, 50)}...\n\n`;
+    message += `📊 Combined Trend: ${serpData.score}/100 ${serpData.status}\n`;
     message += `🏷️ Category: ${serpData.category}\n`;
+    if (serpData.regions) {
+      message += `   ${REGIONS.us.emoji} US: ${serpData.regions.us?.score || '?'}  `;
+      message += `${REGIONS.de.emoji} DE: ${serpData.regions.de?.score || '?'}  `;
+      message += `${REGIONS.uk.emoji} UK: ${serpData.regions.uk?.score || '?'}\n`;
+    }
     message += serpData.ai_enhanced ? `🤖 AI-Enhanced: Yes (${serpData.ai_insights?.length || 0} insights)\n` : '';
+    message += serpData.high_monetization ? `💰 High Monetization Candidate (DE+UK + commercial)\n` : '';
     message += `🔗 Source: ${serpData.link.slice(0, 50)}...\n\n`;
     
     outlines.forEach((outline, index) => {
@@ -518,17 +541,17 @@ async function processOutlinesCommand(token, topic) {
 }
 
 /**
- * Run the enhanced daily scout process
+ * Run the enhanced daily scout process (multi‑market)
  */
 async function runEnhancedDailyScout() {
   try {
-    console.log('Executing enhanced daily scout...');
+    console.log('Executing multi‑market daily scout...');
     
     // Generate dynamic queries
     const { queries, theme, dateInfo } = generateDailyQueries();
     const dailyTopics = [];
     
-    // Get SERP data for each query
+    // Get multi‑region data for each query
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i];
       try {
@@ -539,7 +562,7 @@ async function runEnhancedDailyScout() {
           ...serpData,
           index: i
         });
-        console.log(`Got AI-enhanced data for query ${i + 1}: ${query.slice(0, 40)}...`);
+        console.log(`Got multi‑market data for query ${i + 1}: ${query.slice(0, 40)}...`);
         await new Promise(resolve => setTimeout(resolve, 1500)); // Rate limiting
       } catch (error) {
         console.error(`Error processing query "${query}":`, error);
@@ -551,11 +574,11 @@ async function runEnhancedDailyScout() {
     let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
     report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
     report += `🎯 Monthly Theme: ${theme}\n`;
-    report += `🇩🇪 Geo‑targeting: Germany (gl=de)\n`;
-    report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
+    report += `🌍 Multi‑market: US (40%), DE (30%), UK (20%) + rising signals (10%)\n`;
+    report += `🤖 AI APIs: Google AI Mode + AI Overview (per region)\n\n`;
     report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
-    // Sort by score for better presentation
+    // Sort by combined score
     dailyTopics.sort((a, b) => b.score - a.score);
     
     for (let i = 0; i < dailyTopics.length; i++) {
@@ -563,11 +586,17 @@ async function runEnhancedDailyScout() {
       const emoji = ["🔥", "📈", "🎯", "⚡"][i] || "📝";
       const categoryEmoji = topic.category;
       const aiBadge = topic.ai_enhanced ? '🤖 ' : '';
+      const monetizationBadge = topic.high_monetization ? '💰 ' : '';
       const paaPreview = topic.questions?.length > 0 ? 
         `${topic.questions[0].slice(0, 50)}...` : "What music creators need to know";
       
-      report += `${emoji} **${aiBadge}${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
-      report += `   📊 Trend Score: ${topic.score}/100 ${topic.status}\n`;
+      report += `${emoji} **${monetizationBadge}${aiBadge}${categoryEmoji} ${topic.query.slice(0, 50)}...**\n`;
+      report += `   📊 Combined Score: ${topic.score}/100 ${topic.status}\n`;
+      if (topic.regions) {
+        report += `   ${REGIONS.us.emoji} US: ${topic.regions.us?.score || '?'}  `;
+        report += `${REGIONS.de.emoji} DE: ${topic.regions.de?.score || '?'}  `;
+        report += `${REGIONS.uk.emoji} UK: ${topic.regions.uk?.score || '?'}\n`;
+      }
       report += `   🏷️ Source: ${topic.source || 'Various'}\n`;
       if (topic.ai_insights && topic.ai_insights.length > 0) {
         report += `   💡 AI Insight: ${topic.ai_insights[0].slice(0, 40)}...\n`;
@@ -578,11 +607,11 @@ async function runEnhancedDailyScout() {
     
     report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     report += "**🚀 ENHANCED FEATURES:**\n";
-    report += "- 🇩🇪 Results targeted to Germany for higher RPM\n";
-    report += "- 🤖 Google AI Mode API (AI-generated results)\n";
-    report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
-    report += "- 🔍 Multi-source question extraction\n";
-    report += "- 📈 AI-enhanced trend scoring\n\n";
+    report += "- 🌍 Multi‑market querying (US, DE, UK)\n";
+    report += "- 📊 Weighted trend scoring (40% US, 30% DE, 20% UK, 10% rising)\n";
+    report += "- 💰 High‑monetisation flag (DE+UK + commercial keywords)\n";
+    report += "- 🤖 Google AI Mode & AI Overview per region\n";
+    report += "- 🔍 Multi‑source question extraction\n\n";
     report += "**💡 BLOG GENERATION INSTRUCTIONS:**\n";
     report += "1. Type `/blog` in this channel\n";
     report += "2. Choose topic number (1-4)\n";
@@ -590,12 +619,12 @@ async function runEnhancedDailyScout() {
     report += "4. Get full semantic SEO blog with PAA → H3 headers!\n\n";
     report += "⏱️ *Only 1 high-quality blog per day for maximum SEO impact*\n";
     report += "✅ *Previous blogs indexed in <5 hours*\n";
-    report += "🤖 *AI-enhanced topics for better search visibility*";
+    report += "🤖 *AI‑enhanced topics for better search visibility*";
     
     // Send to Discord
     await sendToDiscordChannel(report);
     
-    console.log('Enhanced daily scout completed successfully');
+    console.log('Multi‑market daily scout completed successfully');
     
     return {
       success: true,
@@ -607,203 +636,252 @@ async function runEnhancedDailyScout() {
         query: t.query,
         score: t.score,
         category: t.category,
-        ai_enhanced: t.ai_enhanced
+        ai_enhanced: t.ai_enhanced,
+        high_monetization: t.high_monetization,
+        regions: t.regions ? Object.keys(t.regions).map(r => ({ region: r, score: t.regions[r]?.score })) : []
       })),
       timestamp: new Date().toISOString()
     };
     
   } catch (error) {
-    console.error('Enhanced scout execution error:', error);
+    console.error('Scout execution error:', error);
     throw error;
   }
 }
 
 /**
- * Google AI Mode API - For AI-generated search results (now geo‑targeted to Germany)
+ * Fetch data for a single region (regular + AI mode + AI overview)
  */
-async function getGoogleAIModeData(query) {
-  try {
-    console.log(`🤖 Fetching Google AI Mode data for: ${query.slice(0, 40)}...`);
-    
-    const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.error) {
-      console.log(`❌ Google AI Mode API error: ${data.error}`);
-      return null;
-    }
-    
-    console.log(`✅ Google AI Mode data received`);
-    return data;
-  } catch (error) {
-    console.error(`❌ Google AI Mode API failed:`, error.message);
-    return null;
+async function fetchRegionData(query, regionKey, context = {}) {
+  const region = REGIONS[regionKey];
+  console.log(`🌍 Fetching data for ${region.name} (${regionKey})...`);
+
+  // Parallel API calls for this region
+  const [regularData, aiModeData, aiOverviewData] = await Promise.allSettled([
+    getRegularSerpData(query, regionKey, context),
+    getGoogleAIModeData(query, regionKey),
+    getGoogleAIOverviewData(query, regionKey)
+  ]);
+
+  const searchData = regularData.status === 'fulfilled' ? regularData.value : null;
+  const aiMode = aiModeData.status === 'fulfilled' ? aiModeData.value : null;
+  const aiOverview = aiOverviewData.status === 'fulfilled' ? aiOverviewData.value : null;
+
+  if (!searchData) {
+    // Fallback if regular data fails
+    return {
+      region: regionKey,
+      error: true,
+      score: 30,
+      questions: [],
+      ai_enhanced: false,
+      ai_insights: [],
+      ai_overview_present: false,
+      link: 'https://example.com/no-link-found',
+      title: `No data for ${query}`,
+      snippet: '',
+      source: 'error',
+      total_results: 0,
+      quality_score: 0
+    };
   }
+
+  // Combine questions from all sources
+  let combinedQuestions = [...(searchData.questions || [])];
+  let aiInsights = [];
+
+  // Extract from AI Mode
+  if (aiMode && aiMode.organic_results) {
+    const aiResults = aiMode.organic_results.slice(0, 3).filter(r => r.snippet);
+    aiInsights = aiResults.map(r => r.snippet);
+    if (aiMode.related_questions) {
+      const aiQuestions = aiMode.related_questions
+        .slice(0, 5)
+        .map(q => q.question || q)
+        .filter(q => q && typeof q === 'string');
+      combinedQuestions = [...combinedQuestions, ...aiQuestions];
+    }
+  }
+
+  // Extract from AI Overview
+  let aiOverviewPresent = false;
+  if (aiOverview && aiOverview.ai_overview) {
+    aiOverviewPresent = true;
+    const overview = aiOverview.ai_overview;
+    if (overview.text) {
+      aiInsights.push(overview.text.substring(0, 200) + '...');
+    }
+    if (overview.questions) {
+      const overviewQuestions = overview.questions
+        .slice(0, 5)
+        .map(q => q.question || q)
+        .filter(q => q && typeof q === 'string');
+      combinedQuestions = [...combinedQuestions, ...overviewQuestions];
+    }
+  }
+
+  const uniqueQuestions = [...new Set(combinedQuestions)].slice(0, 7);
+
+  // Calculate trend score (base from regular data + AI bonuses)
+  let trendScore = searchData.score || 40;
+  if (aiMode || aiOverview) {
+    trendScore += 15;
+  }
+  if (aiMode && aiOverview) {
+    trendScore += 10;
+  }
+  if (aiInsights.length > 0) {
+    trendScore += Math.min(aiInsights.length * 3, 15);
+  }
+  trendScore = Math.min(Math.max(trendScore, 40), 100);
+
+  // Determine status
+  let status = '📊 STEADY';
+  if (trendScore > 75) status = '🔥 VIRAL';
+  else if (trendScore > 60) status = '📈 TRENDING';
+  if (aiMode || aiOverview) status = '🤖 ' + status;
+
+  return {
+    region: regionKey,
+    score: Math.round(trendScore),
+    status,
+    link: searchData.link,
+    title: searchData.title,
+    snippet: searchData.snippet,
+    questions: uniqueQuestions,
+    total_results: searchData.total_results,
+    quality_score: searchData.quality_score,
+    source: searchData.source,
+    ai_enhanced: !!(aiMode || aiOverview),
+    ai_insights: aiInsights.slice(0, 2),
+    ai_overview_present: aiOverviewPresent
+  };
 }
 
 /**
- * Google AI Overview API - For AI Overview blocks (now geo‑targeted to Germany)
- */
-async function getGoogleAIOverviewData(query) {
-  try {
-    console.log(`🧠 Fetching Google AI Overview data for: ${query.slice(0, 40)}...`);
-    
-    const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.error) {
-      console.log(`❌ Google AI Overview API error: ${data.error}`);
-      return null;
-    }
-    
-    console.log(`✅ Google AI Overview data received`);
-    return data;
-  } catch (error) {
-    console.error(`❌ Google AI Overview API failed:`, error.message);
-    return null;
-  }
-}
-
-/**
- * Enhanced SERP API Function with AI APIs (now geo‑targeted to Germany)
+ * Multi‑market SERP function – combines data from US, DE, UK
  */
 async function getEnhancedSerpData(query, context = {}) {
-  try {
-    console.log(`🔍 Fetching enhanced SERP data for: ${query}`);
-    
-    // Parallel API calls for better performance
-    const [regularData, aiModeData, aiOverviewData] = await Promise.allSettled([
-      getRegularSerpData(query, context),
-      getGoogleAIModeData(query),
-      getGoogleAIOverviewData(query)
-    ]);
-    
-    const searchData = regularData.status === 'fulfilled' ? regularData.value : null;
-    const aiMode = aiModeData.status === 'fulfilled' ? aiModeData.value : null;
-    const aiOverview = aiOverviewData.status === 'fulfilled' ? aiOverviewData.value : null;
-    
-    if (!searchData) {
-      throw new Error('Failed to get regular search data');
-    }
-    
-    // Combine AI data with regular data
-    let combinedQuestions = [...(searchData.questions || [])];
-    let aiInsights = [];
-    
-    // Extract from AI Mode
-    if (aiMode && aiMode.organic_results) {
-      // Get AI-generated summaries
-      const aiResults = aiMode.organic_results.slice(0, 3).filter(r => r.snippet);
-      aiInsights = aiResults.map(r => r.snippet);
-      
-      // Extract questions from AI Mode
-      if (aiMode.related_questions) {
-        const aiQuestions = aiMode.related_questions
-          .slice(0, 5)
-          .map(q => q.question || q)
-          .filter(q => q && typeof q === 'string');
-        combinedQuestions = [...combinedQuestions, ...aiQuestions];
+  console.log(`🔍 Fetching multi‑region SERP data for: ${query}`);
+
+  // Fetch data for each region in parallel
+  const regionResults = await Promise.allSettled(
+    Object.keys(REGIONS).map(async (regionKey) => {
+      try {
+        return await fetchRegionData(query, regionKey, context);
+      } catch (error) {
+        console.error(`Error fetching region ${regionKey}:`, error);
+        return { region: regionKey, error: true, score: 30, questions: [] };
       }
-    }
-    
-    // Extract from AI Overview
-    if (aiOverview && aiOverview.ai_overview) {
-      const overview = aiOverview.ai_overview;
-      if (overview.text) {
-        aiInsights.push(overview.text.substring(0, 200) + '...');
+    })
+  );
+
+  const regionsData = {};
+  let totalScore = 0;
+  let combinedQuestions = [];
+  let aiInsights = [];
+  let aiEnhanced = false;
+  let bestLink = '';
+  let bestTitle = '';
+  let bestSnippet = '';
+  let bestSource = '';
+  let highestScore = -1;
+
+  regionResults.forEach((result) => {
+    if (result.status === 'fulfilled' && result.value && !result.value.error) {
+      const data = result.value;
+      const regionKey = data.region;
+      regionsData[regionKey] = data;
+
+      if (data.questions) combinedQuestions = combinedQuestions.concat(data.questions);
+      if (data.ai_enhanced) aiEnhanced = true;
+      if (data.ai_insights) aiInsights = aiInsights.concat(data.ai_insights);
+
+      if (data.score > highestScore) {
+        highestScore = data.score;
+        bestLink = data.link;
+        bestTitle = data.title;
+        bestSnippet = data.snippet;
+        bestSource = data.source;
       }
-      
-      if (overview.questions) {
-        const overviewQuestions = overview.questions
-          .slice(0, 5)
-          .map(q => q.question || q)
-          .filter(q => q && typeof q === 'string');
-        combinedQuestions = [...combinedQuestions, ...overviewQuestions];
-      }
+
+      // Weighted contribution
+      const weight = REGIONS[regionKey]?.weight || 0;
+      totalScore += data.score * weight;
+    } else {
+      // Fallback for failed region
+      const regionKey = result.value?.region || 'unknown';
+      const weight = REGIONS[regionKey]?.weight || 0;
+      totalScore += 30 * weight;
     }
-    
-    // Remove duplicates and limit
-    const uniqueQuestions = [...new Set(combinedQuestions)].slice(0, 7);
-    
-    // Calculate enhanced trend score with AI bonus
-    let trendScore = searchData.score || 40;
-    
-    // AI data bonus
-    if (aiMode || aiOverview) {
-      trendScore += 15; // Bonus for having AI-generated content
-      console.log(`✨ AI data bonus applied for: ${query.slice(0, 40)}...`);
-    }
-    
-    // Multiple AI sources bonus
-    if (aiMode && aiOverview) {
-      trendScore += 10;
-    }
-    
-    // AI insights bonus
-    if (aiInsights.length > 0) {
-      trendScore += Math.min(aiInsights.length * 3, 15);
-    }
-    
-    // Clamp score
-    trendScore = Math.min(Math.max(trendScore, 40), 100);
-    
-    // Determine status
-    let status = '📊 STEADY';
-    if (trendScore > 75) status = '🔥 VIRAL';
-    else if (trendScore > 60) status = '📈 TRENDING';
-    
-    if (aiMode || aiOverview) {
-      status = '🤖 ' + status; // Add AI indicator
-    }
-    
-    // Categorize the topic
-    let category = searchData.category;
-    const queryLower = query.toLowerCase();
-    if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
-    else if (queryLower.includes('gear') || queryLower.includes('hardware') || queryLower.includes('equipment')) category = '🎛️ GEAR';
-    else if (queryLower.includes('news') || queryLower.includes('industry') || queryLower.includes('trend')) category = '📰 NEWS';
-    else if (queryLower.includes('production') || queryLower.includes('studio') || queryLower.includes('recording')) category = '🎚️ PRODUCTION';
-    
-    return {
-      query,
-      category,
-      score: Math.round(trendScore),
-      link: searchData.link,
-      title: searchData.title,
-      snippet: searchData.snippet,
-      questions: uniqueQuestions,
-      status,
-      total_results: searchData.total_results,
-      quality_score: searchData.quality_score,
-      source: searchData.source,
-      ai_enhanced: !!(aiMode || aiOverview),
-      ai_insights: aiInsights.slice(0, 2)
-    };
-    
-  } catch (error) {
-    console.error(`❌ Enhanced SERP error for "${query}":`, error.message);
-    return getFallbackSerpData(query);
-  }
+  });
+
+  // Rising signals bonus (10%) – based on AI overview presence
+  let risingBonus = 0;
+  Object.values(regionsData).forEach(data => {
+    if (data.ai_overview_present) risingBonus += 3.33; // max 10 if all three have it
+  });
+  risingBonus = Math.min(risingBonus, 10);
+  totalScore += risingBonus;
+
+  // Clamp
+  totalScore = Math.min(Math.max(Math.round(totalScore), 40), 100);
+
+  // Determine overall status
+  let status = '📊 STEADY';
+  if (totalScore > 75) status = '🔥 VIRAL';
+  else if (totalScore > 60) status = '📈 TRENDING';
+  if (aiEnhanced) status = '🤖 ' + status;
+
+  const uniqueQuestions = [...new Set(combinedQuestions)].slice(0, 7);
+
+  // Category based on query
+  let category = 'OTHER';
+  const queryLower = query.toLowerCase();
+  if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
+  else if (queryLower.includes('gear') || queryLower.includes('hardware') || queryLower.includes('equipment')) category = '🎛️ GEAR';
+  else if (queryLower.includes('news') || queryLower.includes('industry') || queryLower.includes('trend')) category = '📰 NEWS';
+  else if (queryLower.includes('production') || queryLower.includes('studio') || queryLower.includes('recording')) category = '🎚️ PRODUCTION';
+
+  // High monetisation candidate?
+  const hasDE = regionsData.de && !regionsData.de.error;
+  const hasUK = regionsData.uk && !regionsData.uk.error;
+  const hasCommercial = COMMERCIAL_MODIFIERS.some(mod => queryLower.includes(mod));
+  const highMonetization = hasDE && hasUK && hasCommercial;
+
+  return {
+    query,
+    category,
+    score: totalScore,
+    link: bestLink || 'https://example.com/no-link-found',
+    title: bestTitle || `Latest updates: ${query.slice(0, 50)}`,
+    snippet: bestSnippet || `Stay informed about ${query.slice(0, 30)}...`,
+    questions: uniqueQuestions,
+    status,
+    total_results: Object.values(regionsData).reduce((acc, d) => acc + (d.total_results || 0), 0),
+    quality_score: highestScore,
+    source: bestSource || 'unknown',
+    ai_enhanced: aiEnhanced,
+    ai_insights: aiInsights.slice(0, 2),
+    regions: regionsData,
+    high_monetization: highMonetization
+  };
 }
 
 /**
- * Regular SERP data function (now geo‑targeted to Germany)
+ * Regular SERP data function (region‑aware)
  */
-async function getRegularSerpData(query, context = {}) {
+async function getRegularSerpData(query, regionKey, context = {}) {
+  const region = REGIONS[regionKey];
   try {
-    // Add freshness modifier based on context
     const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w';
-    
-    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
+    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&gl=${region.gl}&google_domain=${region.domain}&api_key=${SERPAPI_KEY}`;
     const searchResponse = await fetch(searchUrl);
     const searchData = await searchResponse.json();
-    
-    // Extract organic results
+
     const organic = searchData.organic_results || [];
-    
-    // Filter out unwanted domains
+
+    // Excluded domains
     const excludedDomains = [
       'facebook.com', 'twitter.com', 'instagram.com', 
       'youtube.com', 'reddit.com', 'tiktok.com',
@@ -811,26 +889,18 @@ async function getRegularSerpData(query, context = {}) {
       'wikipedia.org', 'yelp.com', 'amazon.com',
       'ebay.com', 'etsy.com', 'spotify.com'
     ];
-    
-    // Find high-quality results
+
     let bestResult = {};
     let qualityScore = 0;
-    
+
     for (const result of organic) {
       if (!result.link || !result.title) continue;
-      
       try {
         const url = new URL(result.link);
         const hostname = url.hostname.toLowerCase();
-        
-        // Skip excluded domains
-        if (excludedDomains.some(domain => hostname.includes(domain))) {
-          continue;
-        }
-        
+        if (excludedDomains.some(domain => hostname.includes(domain))) continue;
+
         let currentScore = 0;
-        
-        // Premium domains get highest priority
         const premiumDomains = [
           'musictech.com', 'musically.com', 'digitalmusicnews.com',
           'billboard.com', 'rollingstone.com', 'nme.com',
@@ -838,39 +908,29 @@ async function getRegularSerpData(query, context = {}) {
           'producerspot.com', 'attackmagazine.com', 'futuremusic.com',
           'thewire.co.uk', 'residentadvisor.net', 'mixmag.net'
         ];
-        
         const industryDomains = [
           'theverge.com', 'techcrunch.com', 'wired.com',
           'engadget.com', 'arstechnica.com', 'gizmodo.com',
           'forbes.com', 'businessinsider.com', 'bloomberg.com',
           'reuters.com', 'apnews.com', 'bbc.com'
         ];
-        
-        if (premiumDomains.some(domain => hostname.includes(domain))) {
-          currentScore += 30;
-        } else if (industryDomains.some(domain => hostname.includes(domain))) {
-          currentScore += 20;
-        }
-        
-        // Content quality checks
+
+        if (premiumDomains.some(domain => hostname.includes(domain))) currentScore += 30;
+        else if (industryDomains.some(domain => hostname.includes(domain))) currentScore += 20;
+
         if (result.title.length > 20 && result.title.length < 100) currentScore += 10;
         if (result.snippet && result.snippet.length > 100) currentScore += 15;
         if (result.date) currentScore += 10;
-        
-        // Update best result if higher quality
+
         if (currentScore > qualityScore) {
           bestResult = result;
           qualityScore = currentScore;
           bestResult.hostname = hostname;
           bestResult.qualityScore = currentScore;
         }
-        
-      } catch (e) {
-        // Invalid URL, skip
-      }
+      } catch (e) { /* ignore invalid URL */ }
     }
-    
-    // If no result found, use first organic result
+
     if (!bestResult.title && organic.length > 0) {
       bestResult = organic[0];
       try {
@@ -881,7 +941,7 @@ async function getRegularSerpData(query, context = {}) {
       }
       bestResult.qualityScore = 5;
     }
-    
+
     // Extract People Also Ask questions
     let questions = [];
     const questionSources = [
@@ -890,7 +950,6 @@ async function getRegularSerpData(query, context = {}) {
       searchData.inline_questions,
       searchData.organic_results?.[0]?.related_questions
     ];
-    
     for (const source of questionSources) {
       if (Array.isArray(source) && source.length > 0) {
         source.slice(0, 5).forEach(item => {
@@ -900,8 +959,7 @@ async function getRegularSerpData(query, context = {}) {
         if (questions.length >= 3) break;
       }
     }
-    
-    // Generate fallback questions if needed
+
     if (questions.length < 3) {
       const queryWords = query.toLowerCase().split(' ').slice(0, 4);
       const fallbacks = [
@@ -912,34 +970,20 @@ async function getRegularSerpData(query, context = {}) {
       ];
       questions = [...questions, ...fallbacks.slice(0, 5 - questions.length)];
     }
-    
-    // Calculate base trend score
-    let trendScore = 40;
-    trendScore += 25; // Recency bonus
-    
+
+    // Base trend score
+    let trendScore = 40 + 25; // recency
     const totalResults = searchData.search_information?.total_results || 0;
     if (totalResults > 1000000) trendScore += 10;
     if (totalResults > 5000000) trendScore += 5;
-    
     if (qualityScore > 30) trendScore += 15;
     else if (qualityScore > 20) trendScore += 10;
     else if (qualityScore > 10) trendScore += 5;
-    
     if (questions.length >= 3) trendScore += 5;
-    
     trendScore = Math.min(Math.max(trendScore, 40), 95);
-    
-    // Categorize the topic
-    let category = 'OTHER';
-    const queryLower = query.toLowerCase();
-    if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
-    else if (queryLower.includes('gear') || queryLower.includes('hardware') || queryLower.includes('equipment')) category = '🎛️ GEAR';
-    else if (queryLower.includes('news') || queryLower.includes('industry') || queryLower.includes('trend')) category = '📰 NEWS';
-    else if (queryLower.includes('production') || queryLower.includes('studio') || queryLower.includes('recording')) category = '🎚️ PRODUCTION';
-    
+
     return {
       query,
-      category,
       score: Math.round(trendScore),
       link: bestResult.link || 'https://example.com/no-link-found',
       title: bestResult.title || `Latest updates: ${query.slice(0, 50)}`,
@@ -949,35 +993,54 @@ async function getRegularSerpData(query, context = {}) {
       quality_score: qualityScore,
       source: bestResult.hostname || 'unknown'
     };
-    
   } catch (error) {
-    console.error(`❌ Regular SERP error for "${query}":`, error.message);
+    console.error(`❌ Regular SERP error for ${regionKey} "${query}":`, error.message);
     throw error;
   }
 }
 
-function getFallbackSerpData(query) {
-  const fallbackQuestions = [
-    `What are the latest trends in ${query.split(' ').slice(0, 3).join(' ')}?`,
-    `How is ${query.split(' ').slice(0, 2).join(' ')} impacting music production?`,
-    `What should producers know about ${query.split(' ').slice(0, 2).join(' ')}?`
-  ];
-  
-  return {
-    query,
-    category: 'ERROR',
-    score: 40,
-    link: 'https://example.com/no-link-found',
-    title: `Latest updates on ${query}`,
-    snippet: `Stay informed about the latest developments in ${query}`,
-    questions: fallbackQuestions,
-    status: '❌ ERROR',
-    total_results: 0,
-    quality_score: 0,
-    source: 'error',
-    ai_enhanced: false,
-    ai_insights: []
-  };
+/**
+ * Google AI Mode API (region‑aware)
+ */
+async function getGoogleAIModeData(query, regionKey) {
+  const region = REGIONS[regionKey];
+  try {
+    console.log(`🤖 Fetching Google AI Mode data for ${region.name}: ${query.slice(0, 40)}...`);
+    const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&gl=${region.gl}&google_domain=${region.domain}&api_key=${SERPAPI_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.error) {
+      console.log(`❌ Google AI Mode API error (${regionKey}): ${data.error}`);
+      return null;
+    }
+    console.log(`✅ Google AI Mode data received (${regionKey})`);
+    return data;
+  } catch (error) {
+    console.error(`❌ Google AI Mode API failed (${regionKey}):`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Google AI Overview API (region‑aware)
+ */
+async function getGoogleAIOverviewData(query, regionKey) {
+  const region = REGIONS[regionKey];
+  try {
+    console.log(`🧠 Fetching Google AI Overview data for ${region.name}: ${query.slice(0, 40)}...`);
+    const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&gl=${region.gl}&google_domain=${region.domain}&api_key=${SERPAPI_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.error) {
+      console.log(`❌ Google AI Overview API error (${regionKey}): ${data.error}`);
+      return null;
+    }
+    console.log(`✅ Google AI Overview data received (${regionKey})`);
+    return data;
+  } catch (error) {
+    console.error(`❌ Google AI Overview API failed (${regionKey}):`, error.message);
+    return null;
+  }
 }
 
 /**
@@ -997,8 +1060,9 @@ async function generateAIEnhancedOutlines(context, serpData) {
       SERP DATA:
       - Topic: ${serpData.query}
       - Category: ${serpData.category}
-      - Trend Score: ${serpData.score}/100 (${serpData.status})
+      - Combined Trend Score: ${serpData.score}/100 (${serpData.status})
       - AI-Enhanced: ${serpData.ai_enhanced ? 'Yes' : 'No'}
+      - High Monetization: ${serpData.high_monetization ? 'Yes' : 'No'}
       - Source: ${serpData.title}
       - People Also Ask: ${serpData.questions ? serpData.questions.slice(0, 5).join(', ') : 'No questions found'}
       
@@ -1039,8 +1103,6 @@ async function generateAIEnhancedOutlines(context, serpData) {
 
 function parseOutlinesWithAI(text) {
   const outlines = [];
-  
-  // Simple parsing
   const lines = text.split('\n');
   let currentOutline = null;
   
@@ -1084,7 +1146,6 @@ function parseOutlinesWithAI(text) {
   
   if (currentOutline) outlines.push(currentOutline);
   
-  // Ensure we have 4 outlines
   while (outlines.length < 4) {
     const type = OUTLINE_TYPES[outlines.length];
     outlines.push({
@@ -1133,13 +1194,11 @@ function getFallbackOutlines(context) {
 async function editOriginalResponse(token, content) {
   try {
     const url = `https://discord.com/api/v10/webhooks/${DISCORD_APP_ID}/${token}/messages/@original`;
-    
     const response = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: content.slice(0, 2000) })
     });
-    
     if (!response.ok) {
       console.error(`Failed to edit Discord message: ${response.status}`);
     }
@@ -1151,9 +1210,7 @@ async function editOriginalResponse(token, content) {
 async function sendToDiscordChannel(content) {
   try {
     const url = `https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages`;
-    
     console.log('📤 Sending message to Discord channel...');
-    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -1162,7 +1219,6 @@ async function sendToDiscordChannel(content) {
       },
       body: JSON.stringify({ content: content.slice(0, 2000) })
     });
-    
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Failed to send to Discord channel: ${response.status} ${errorText}`);
