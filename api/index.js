@@ -447,7 +447,8 @@ async function processBlogCommand(token, data) {
     let message = `🎸 **SOUNDSWAP DAILY BLOG TOPICS**\n`;
     message += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
     message += `🎯 Theme: ${theme}\n`;
-    message += `🤖 AI APIs: Google AI Mode + AI Overview\n\n`;
+    message += `🇩🇪 Geo‑targeting: Germany (gl=de)\n`;
+    message += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
     message += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
     // Sort by score for better presentation
@@ -550,6 +551,7 @@ async function runEnhancedDailyScout() {
     let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
     report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
     report += `🎯 Monthly Theme: ${theme}\n`;
+    report += `🇩🇪 Geo‑targeting: Germany (gl=de)\n`;
     report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
     report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
@@ -576,6 +578,7 @@ async function runEnhancedDailyScout() {
     
     report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     report += "**🚀 ENHANCED FEATURES:**\n";
+    report += "- 🇩🇪 Results targeted to Germany for higher RPM\n";
     report += "- 🤖 Google AI Mode API (AI-generated results)\n";
     report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
     report += "- 🔍 Multi-source question extraction\n";
@@ -616,13 +619,13 @@ async function runEnhancedDailyScout() {
 }
 
 /**
- * Google AI Mode API - For AI-generated search results
+ * Google AI Mode API - For AI-generated search results (now geo‑targeted to Germany)
  */
 async function getGoogleAIModeData(query) {
   try {
     console.log(`🤖 Fetching Google AI Mode data for: ${query.slice(0, 40)}...`);
     
-    const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+    const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
     
@@ -640,13 +643,13 @@ async function getGoogleAIModeData(query) {
 }
 
 /**
- * Google AI Overview API - For AI Overview blocks
+ * Google AI Overview API - For AI Overview blocks (now geo‑targeted to Germany)
  */
 async function getGoogleAIOverviewData(query) {
   try {
     console.log(`🧠 Fetching Google AI Overview data for: ${query.slice(0, 40)}...`);
     
-    const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+    const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
     
@@ -664,7 +667,7 @@ async function getGoogleAIOverviewData(query) {
 }
 
 /**
- * Enhanced SERP API Function with AI APIs
+ * Enhanced SERP API Function with AI APIs (now geo‑targeted to Germany)
  */
 async function getEnhancedSerpData(query, context = {}) {
   try {
@@ -786,14 +789,14 @@ async function getEnhancedSerpData(query, context = {}) {
 }
 
 /**
- * Regular SERP data function
+ * Regular SERP data function (now geo‑targeted to Germany)
  */
 async function getRegularSerpData(query, context = {}) {
   try {
     // Add freshness modifier based on context
     const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w';
     
-    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&api_key=${SERPAPI_KEY}`;
+    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
     const searchResponse = await fetch(searchUrl);
     const searchData = await searchResponse.json();
     
@@ -926,8 +929,17 @@ async function getRegularSerpData(query, context = {}) {
     
     trendScore = Math.min(Math.max(trendScore, 40), 95);
     
+    // Categorize the topic
+    let category = 'OTHER';
+    const queryLower = query.toLowerCase();
+    if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
+    else if (queryLower.includes('gear') || queryLower.includes('hardware') || queryLower.includes('equipment')) category = '🎛️ GEAR';
+    else if (queryLower.includes('news') || queryLower.includes('industry') || queryLower.includes('trend')) category = '📰 NEWS';
+    else if (queryLower.includes('production') || queryLower.includes('studio') || queryLower.includes('recording')) category = '🎚️ PRODUCTION';
+    
     return {
       query,
+      category,
       score: Math.round(trendScore),
       link: bestResult.link || 'https://example.com/no-link-found',
       title: bestResult.title || `Latest updates: ${query.slice(0, 50)}`,

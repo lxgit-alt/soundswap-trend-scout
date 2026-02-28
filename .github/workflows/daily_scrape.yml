@@ -71,11 +71,11 @@ jobs:
             echo "⚠ CRON_SECRET is not set (optional for direct API call)"
           fi
 
-      - name: Run Enhanced Daily Scout with AI APIs
+      - name: Run Enhanced Daily Scout with AI APIs (Geo‑targeted to Germany)
         id: scout
         continue-on-error: true
         run: |
-          echo "🚀 Starting enhanced daily scout script with AI APIs..."
+          echo "🚀 Starting enhanced daily scout script with AI APIs (geo‑targeting: Germany)..."
           echo "Current directory: $(pwd)"
           echo "Node version: $(node --version)"
           
@@ -184,12 +184,12 @@ jobs:
             };
           }
           
-          // Google AI Mode API - For AI-generated search results
+          // Google AI Mode API - For AI-generated search results (now geo‑targeted to Germany)
           async function getGoogleAIModeData(query) {
             try {
               console.log(`🤖 Fetching Google AI Mode data for: ${query.slice(0, 40)}...`);
               
-              const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+              const url = `https://serpapi.com/search?engine=google_ai_mode&q=${encodeURIComponent(query)}&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
               const response = await fetch(url);
               const data = await response.json();
               
@@ -206,12 +206,12 @@ jobs:
             }
           }
           
-          // Google AI Overview API - For AI Overview blocks
+          // Google AI Overview API - For AI Overview blocks (now geo‑targeted to Germany)
           async function getGoogleAIOverviewData(query) {
             try {
               console.log(`🧠 Fetching Google AI Overview data for: ${query.slice(0, 40)}...`);
               
-              const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+              const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
               const response = await fetch(url);
               const data = await response.json();
               
@@ -228,7 +228,7 @@ jobs:
             }
           }
           
-          // Main SERP data function with AI APIs
+          // Main SERP data function with AI APIs (now geo‑targeted to Germany)
           async function getEnhancedSerpData(query, context = {}) {
             try {
               console.log(`🔍 Fetching enhanced SERP data for: ${query}`);
@@ -337,13 +337,13 @@ jobs:
             }
           }
           
-          // Regular SERP data function
+          // Regular SERP data function (now geo‑targeted to Germany)
           async function getRegularSerpData(query, context = {}) {
             try {
               // Add freshness modifier based on context
               const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w';
               
-              const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&api_key=${SERPAPI_KEY}`;
+              const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&gl=de&google_domain=google.de&api_key=${SERPAPI_KEY}`;
               const searchResponse = await fetch(searchUrl);
               const searchData = await searchResponse.json();
               
@@ -556,7 +556,7 @@ jobs:
           
           async function runEnhancedDailyScout() {
             try {
-              console.log('🎯 Starting enhanced daily scout with AI APIs...');
+              console.log('🎯 Starting enhanced daily scout with AI APIs (geo‑targeting: Germany)...');
               
               // Generate dynamic queries
               const { queries, theme, dateInfo } = generateDailyQueries();
@@ -589,6 +589,7 @@ jobs:
               let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
               report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
               report += `🎯 Monthly Theme: ${theme}\n`;
+              report += `🇩🇪 Geo‑targeting: Germany (gl=de)\n`;
               report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
               report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
               
@@ -615,6 +616,7 @@ jobs:
               
               report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
               report += "**🚀 ENHANCED FEATURES:**\n";
+              report += "- 🇩🇪 Results targeted to Germany for higher RPM\n";
               report += "- 🤖 Google AI Mode API (AI-generated results)\n";
               report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
               report += "- 🔍 Multi-source question extraction\n";
@@ -712,6 +714,7 @@ jobs:
           echo "• Google AI Overview API integration"
           echo "• Multi-source question extraction"
           echo "• AI-enhanced trend scoring"
+          echo "• 🇩🇪 Geo‑targeting to Germany for higher RPM"
           echo "----------------------------------------"
           echo "📊 Next steps:"
           echo "1. Check Discord for AI-enhanced topics"
