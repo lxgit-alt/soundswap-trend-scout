@@ -14,6 +14,7 @@ jobs:
       SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
       DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # <-- ADD THIS SECRET
     
     steps:
       - name: Checkout Code
@@ -33,18 +34,15 @@ jobs:
           echo "Checking environment variables..."
           
           # Check required variables
-          REQUIRED_VARS=("SERPAPI_KEY" "DISCORD_BOT_TOKEN" "DISCORD_CHANNEL_ID")
+          REQUIRED_VARS=("SERPAPI_KEY" "DISCORD_BOT_TOKEN" "DISCORD_CHANNEL_ID" "GEMINI_API_KEY")
           ALL_SET=true
           
           for var in "${REQUIRED_VARS[@]}"; do
-            # Step 1: Get the value of the variable whose name is stored in $var
             val="${!var}"
-            
             if [ -z "$val" ]; then
               echo "❌ $var is NOT set"
               ALL_SET=false
             else
-              # Step 2: Get the length of the string stored in $val
               echo "✓ $var is set (length: ${#val} chars)"
             fi
           done
@@ -55,6 +53,7 @@ jobs:
             echo "1. SERPAPI_KEY"
             echo "2. DISCORD_BOT_TOKEN"
             echo "3. DISCORD_CHANNEL_ID"
+            echo "4. GEMINI_API_KEY"
             exit 1
           fi
           
@@ -79,99 +78,167 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "Node version: $(node --version)"
           
-          # Create enhanced scout script with AI Mode and AI Overview APIs
+          # Create enhanced scout script with Google Trends + AI Mode + AI Overview
           cat > scout-runner.js << 'EOF'
           import fetch from 'node-fetch';
+          import { GoogleGenerativeAI } from '@google/generative-ai';
           
           // Configuration
           const SERPAPI_KEY = process.env.SERPAPI_KEY;
           const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
           const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+          const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
           
-          // Dynamic query generation based on day of week
-          function generateDailyQueries() {
+          // Initialize Gemini
+          const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+          
+          // ──────────────────────────────────────────────────────────────
+          //  NEW: Fetch live trending topics from Google Trends
+          // ──────────────────────────────────────────────────────────────
+          async function fetchTrendingMusicTopics() {
+            try {
+              console.log('📈 Fetching Google Trends daily trending searches...');
+              
+              const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&api_key=${SERPAPI_KEY}`;
+              const response = await fetch(url);
+              const data = await response.json();
+              
+              if (data.error || !data.trending_searches) {
+                throw new Error(data.error || 'No trending data');
+              }
+
+              const trendingQueries = data.trending_searches.map(item => item.query).filter(Boolean);
+              console.log(`Found ${trendingQueries.length} trending queries.`);
+
+              if (trendingQueries.length === 0) {
+                throw new Error('No trending queries returned');
+              }
+
+              const musicTopics = await filterMusicTopicsWithGemini(trendingQueries);
+              
+              if (musicTopics.length < 4) {
+                const keywordFiltered = trendingQueries.filter(q => 
+                  /music|song|producer|beat|audio|studio|instrument|album|concert|festival|vinyl|streaming/i.test(q)
+                );
+                const combined = [...new Set([...musicTopics, ...keywordFiltered])];
+                return combined.slice(0, 4);
+              }
+              
+              return musicTopics.slice(0, 4);
+            } catch (error) {
+              console.error('❌ Failed to fetch trending topics:', error.message);
+              return null;
+            }
+          }
+          
+          async function filterMusicTopicsWithGemini(queries) {
+            try {
+              const prompt = `
+                From the following list of Google Trends queries, select exactly 4 that are most relevant to music production, audio engineering, music business, or music technology. 
+                Return ONLY a JSON array of strings, nothing else.
+                Queries: ${JSON.stringify(queries)}
+              `;
+              
+              const result = await model.generateContent(prompt);
+              const text = await result.response.text();
+              const match = text.match(/\[.*\]/s);
+              if (match) {
+                return JSON.parse(match[0]);
+              }
+              return [];
+            } catch (e) {
+              console.error('Gemini filtering failed:', e);
+              return [];
+            }
+          }
+          
+          // ──────────────────────────────────────────────────────────────
+          //  UPDATED: Generate daily queries (async, uses trends)
+          // ──────────────────────────────────────────────────────────────
+          async function generateDailyQueries() {
             const now = new Date();
-            const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+            const dayOfWeek = now.getDay();
             const dayOfMonth = now.getDate();
-            const weekOfYear = Math.floor(dayOfMonth / 7) + 1;
-            const month = now.getMonth(); // 0-11
+            const month = now.getMonth();
             const year = now.getFullYear();
+
+            let queries = await fetchTrendingMusicTopics();
             
-            // Monthly themes to prevent repetition
-            const monthlyThemes = [
-              'AI Music Production Tools',
-              'Music Gear Releases',
-              'Music Industry News',
-              'Audio Technology',
-              'Music Business Trends',
-              'Creative Production Techniques'
-            ];
-            
-            const theme = monthlyThemes[month % monthlyThemes.length];
-            
-            // Query pools for each category
-            const aiToolsQueries = [
-              `latest AI audio tools ${month + 1}/${year}`,
-              `AI music production software ${year}`,
-              `best AI plugins for producers ${month + 1}/${year}`,
-              `AI mastering tools reviews ${year}`,
-              `artificial intelligence in music production`,
-              `AI vocal processing ${month + 1} ${year}`,
-              `machine learning music composition`,
-              `AI beat making tools ${year}`
-            ];
-            
-            const gearQueries = [
-              `new music production gear ${month + 1}/${year}`,
-              `audio interface releases ${year}`,
-              `studio monitor reviews ${month + 1} ${year}`,
-              `MIDI controller latest models ${year}`,
-              `synthesizer new releases ${month + 1}/${year}`,
-              `microphones for home studio ${year}`,
-              `DAW updates ${month + 1} ${year}`,
-              `music production hardware ${year}`
-            ];
-            
-            const newsQueries = [
-              `music industry news ${month + 1}/${year}`,
-              `streaming services updates ${year}`,
-              `music copyright laws ${month + 1} ${year}`,
-              `artist revenue trends ${year}`,
-              `music marketing strategies ${month + 1}/${year}`,
-              `independent musician news ${year}`,
-              `record label developments ${month + 1} ${year}`,
-              `music distribution platforms ${year}`
-            ];
-            
-            const trendingQueries = [
-              `viral music production trends ${month + 1}/${year}`,
-              `what producers are talking about ${year}`,
-              `emerging music technologies ${month + 1} ${year}`,
-              `music production on social media ${year}`,
-              `creative workflows ${month + 1}/${year}`,
-              `music collaboration tools ${year}`,
-              `home studio setup trends ${month + 1} ${year}`,
-              `music education online ${year}`
-            ];
-            
-            // Rotate queries based on day
-            const dayIndex = dayOfMonth % 8;
-            const weekIndex = weekOfYear % 8;
-            const dayOfWeekIndex = dayOfWeek;
-            
-            // Generate 4 unique queries with rotating selection
-            const queries = [
-              aiToolsQueries[(dayIndex + dayOfWeekIndex) % aiToolsQueries.length],
-              gearQueries[(dayIndex + weekIndex) % gearQueries.length],
-              newsQueries[(dayOfMonth + dayOfWeekIndex) % newsQueries.length],
-              trendingQueries[(dayIndex + month) % trendingQueries.length]
-            ];
-            
+            if (!queries || queries.length < 4) {
+              console.log('Using static fallback queries');
+              const monthlyThemes = [
+                'AI Music Production Tools',
+                'Music Gear Releases',
+                'Music Industry News',
+                'Audio Technology',
+                'Music Business Trends',
+                'Creative Production Techniques'
+              ];
+              const theme = monthlyThemes[month % monthlyThemes.length];
+              
+              const aiToolsQueries = [
+                `latest AI audio tools ${month + 1}/${year}`,
+                `AI music production software ${year}`,
+                `best AI plugins for producers ${month + 1}/${year}`,
+                `AI mastering tools reviews ${year}`,
+                `artificial intelligence in music production`,
+                `AI vocal processing ${month + 1} ${year}`,
+                `machine learning music composition`,
+                `AI beat making tools ${year}`
+              ];
+              
+              const gearQueries = [
+                `new music production gear ${month + 1}/${year}`,
+                `audio interface releases ${year}`,
+                `studio monitor reviews ${month + 1} ${year}`,
+                `MIDI controller latest models ${year}`,
+                `synthesizer new releases ${month + 1}/${year}`,
+                `microphones for home studio ${year}`,
+                `DAW updates ${month + 1} ${year}`,
+                `music production hardware ${year}`
+              ];
+              
+              const newsQueries = [
+                `music industry news ${month + 1}/${year}`,
+                `streaming services updates ${year}`,
+                `music copyright laws ${month + 1} ${year}`,
+                `artist revenue trends ${year}`,
+                `music marketing strategies ${month + 1}/${year}`,
+                `independent musician news ${year}`,
+                `record label developments ${month + 1} ${year}`,
+                `music distribution platforms ${year}`
+              ];
+              
+              const trendingQueries = [
+                `viral music production trends ${month + 1}/${year}`,
+                `what producers are talking about ${year}`,
+                `emerging music technologies ${month + 1} ${year}`,
+                `music production on social media ${year}`,
+                `creative workflows ${month + 1}/${year}`,
+                `music collaboration tools ${year}`,
+                `home studio setup trends ${month + 1} ${year}`,
+                `music education online ${year}`
+              ];
+              
+              const dayIndex = dayOfMonth % 8;
+              const weekIndex = Math.floor(dayOfMonth / 7) % 8;
+              const dayOfWeekIndex = dayOfWeek;
+              
+              queries = [
+                aiToolsQueries[(dayIndex + dayOfWeekIndex) % aiToolsQueries.length],
+                gearQueries[(dayIndex + weekIndex) % gearQueries.length],
+                newsQueries[(dayOfMonth + dayOfWeekIndex) % newsQueries.length],
+                trendingQueries[(dayIndex + month) % trendingQueries.length]
+              ];
+            }
+
+            const theme = `Trending: ${queries[0]}`;
+
             console.log(`\n📅 Date: ${now.toISOString().split('T')[0]}`);
             console.log(`🎯 Theme: ${theme}`);
-            console.log(`🔍 Generated queries:`);
-            queries.forEach((q, i) => console.log(`  ${i+1}. ${q}`));
-            
+            console.log(`🔍 Generated queries:`, queries);
+
             return {
               queries,
               theme,
@@ -233,7 +300,6 @@ jobs:
             try {
               console.log(`🔍 Fetching enhanced SERP data for: ${query}`);
               
-              // Parallel API calls for better performance
               const [regularData, aiModeData, aiOverviewData] = await Promise.allSettled([
                 getRegularSerpData(query, context),
                 getGoogleAIModeData(query),
@@ -248,17 +314,13 @@ jobs:
                 throw new Error('Failed to get regular search data');
               }
               
-              // Combine AI data with regular data
               let combinedQuestions = [...(searchData.questions || [])];
               let aiInsights = [];
               
-              // Extract from AI Mode
               if (aiMode && aiMode.organic_results) {
-                // Get AI-generated summaries
                 const aiResults = aiMode.organic_results.slice(0, 3).filter(r => r.snippet);
                 aiInsights = aiResults.map(r => r.snippet);
                 
-                // Extract questions from AI Mode
                 if (aiMode.related_questions) {
                   const aiQuestions = aiMode.related_questions
                     .slice(0, 5)
@@ -268,7 +330,6 @@ jobs:
                 }
               }
               
-              // Extract from AI Overview
               if (aiOverview && aiOverview.ai_overview) {
                 const overview = aiOverview.ai_overview;
                 if (overview.text) {
@@ -284,41 +345,37 @@ jobs:
                 }
               }
               
-              // Remove duplicates and limit
               const uniqueQuestions = [...new Set(combinedQuestions)].slice(0, 7);
               
-              // Calculate enhanced trend score with AI bonus
               let trendScore = searchData.score || 40;
               
-              // AI data bonus
               if (aiMode || aiOverview) {
-                trendScore += 15; // Bonus for having AI-generated content
+                trendScore += 15;
                 console.log(`✨ AI data bonus applied for: ${query.slice(0, 40)}...`);
               }
               
-              // Multiple AI sources bonus
               if (aiMode && aiOverview) {
                 trendScore += 10;
               }
               
-              // AI insights bonus
               if (aiInsights.length > 0) {
                 trendScore += Math.min(aiInsights.length * 3, 15);
               }
               
-              // Determine status
+              trendScore = Math.min(Math.max(trendScore, 40), 100);
+              
               let status = '📊 STEADY';
               if (trendScore > 75) status = '🔥 VIRAL';
               else if (trendScore > 60) status = '📈 TRENDING';
               
               if (aiMode || aiOverview) {
-                status = '🤖 ' + status; // Add AI indicator
+                status = '🤖 ' + status;
               }
               
               return {
                 query,
                 category: searchData.category,
-                score: Math.min(Math.round(trendScore), 100),
+                score: Math.round(trendScore),
                 link: searchData.link,
                 title: searchData.title,
                 snippet: searchData.snippet,
@@ -337,20 +394,17 @@ jobs:
             }
           }
           
-          // Regular SERP data function
+          // Regular SERP data function (unchanged but copied for completeness)
           async function getRegularSerpData(query, context = {}) {
             try {
-              // Add freshness modifier based on context
               const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w';
               
               const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&tbs=${tbsModifier}&num=10&api_key=${SERPAPI_KEY}`;
               const searchResponse = await fetch(searchUrl);
               const searchData = await searchResponse.json();
               
-              // Extract organic results
               const organic = searchData.organic_results || [];
               
-              // Filter out unwanted domains
               const excludedDomains = [
                 'facebook.com', 'twitter.com', 'instagram.com', 
                 'youtube.com', 'reddit.com', 'tiktok.com',
@@ -359,7 +413,6 @@ jobs:
                 'ebay.com', 'etsy.com', 'spotify.com'
               ];
               
-              // Find high-quality results
               let bestResult = {};
               let qualityScore = 0;
               
@@ -370,14 +423,12 @@ jobs:
                   const url = new URL(result.link);
                   const hostname = url.hostname.toLowerCase();
                   
-                  // Skip excluded domains
                   if (excludedDomains.some(domain => hostname.includes(domain))) {
                     continue;
                   }
                   
                   let currentScore = 0;
                   
-                  // Premium domains get highest priority
                   const premiumDomains = [
                     'musictech.com', 'musically.com', 'digitalmusicnews.com',
                     'billboard.com', 'rollingstone.com', 'nme.com',
@@ -399,12 +450,10 @@ jobs:
                     currentScore += 20;
                   }
                   
-                  // Content quality checks
                   if (result.title.length > 20 && result.title.length < 100) currentScore += 10;
                   if (result.snippet && result.snippet.length > 100) currentScore += 15;
                   if (result.date) currentScore += 10;
                   
-                  // Update best result if higher quality
                   if (currentScore > qualityScore) {
                     bestResult = result;
                     qualityScore = currentScore;
@@ -412,12 +461,9 @@ jobs:
                     bestResult.qualityScore = currentScore;
                   }
                   
-                } catch (e) {
-                  // Invalid URL, skip
-                }
+                } catch (e) {}
               }
               
-              // If no result found, use first organic result
               if (!bestResult.title && organic.length > 0) {
                 bestResult = organic[0];
                 try {
@@ -429,7 +475,6 @@ jobs:
                 bestResult.qualityScore = 5;
               }
               
-              // Extract People Also Ask questions
               let questions = [];
               const questionSources = [
                 searchData.related_questions,
@@ -448,7 +493,6 @@ jobs:
                 }
               }
               
-              // Generate fallback questions if needed
               if (questions.length < 3) {
                 const queryWords = query.toLowerCase().split(' ').slice(0, 4);
                 const fallbacks = [
@@ -460,9 +504,8 @@ jobs:
                 questions = [...questions, ...fallbacks.slice(0, 5 - questions.length)];
               }
               
-              // Calculate base trend score
               let trendScore = 40;
-              trendScore += 25; // Recency bonus
+              trendScore += 25;
               
               const totalResults = searchData.search_information?.total_results || 0;
               if (totalResults > 1000000) trendScore += 10;
@@ -476,7 +519,6 @@ jobs:
               
               trendScore = Math.min(Math.max(trendScore, 40), 95);
               
-              // Categorize the topic
               let category = 'OTHER';
               const queryLower = query.toLowerCase();
               if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
@@ -558,11 +600,9 @@ jobs:
             try {
               console.log('🎯 Starting enhanced daily scout with AI APIs...');
               
-              // Generate dynamic queries
-              const { queries, theme, dateInfo } = generateDailyQueries();
+              const { queries, theme, dateInfo } = await generateDailyQueries();
               const dailyTopics = [];
               
-              // Get SERP data for each query
               for (let i = 0; i < queries.length; i++) {
                 const query = queries[i];
                 try {
@@ -575,7 +615,6 @@ jobs:
                   });
                   console.log(`✅ Processed query ${i + 1}: ${query.slice(0, 40)}...`);
                   
-                  // Rate limiting between queries
                   if (i < queries.length - 1) {
                     await new Promise(resolve => setTimeout(resolve, 1500));
                   }
@@ -584,7 +623,6 @@ jobs:
                 }
               }
               
-              // Build enhanced report
               const dateStr = new Date().toISOString().split('T')[0];
               let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
               report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
@@ -592,7 +630,6 @@ jobs:
               report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
               report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
               
-              // Sort by score for better presentation
               dailyTopics.sort((a, b) => b.score - a.score);
               
               for (let i = 0; i < dailyTopics.length; i++) {
@@ -615,6 +652,7 @@ jobs:
               
               report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
               report += "**🚀 ENHANCED FEATURES:**\n";
+              report += "- 📈 Live Google Trends daily topics\n";
               report += "- 🤖 Google AI Mode API (AI-generated results)\n";
               report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
               report += "- 🔍 Multi-source question extraction\n";
@@ -628,7 +666,6 @@ jobs:
               report += "✅ *Previous blogs indexed in <5 hours*\n";
               report += "🤖 *AI-enhanced topics for better search visibility*";
               
-              // Send to Discord
               await sendToDiscordChannel(report);
               
               console.log('✅ Enhanced daily scout completed successfully');
@@ -675,17 +712,14 @@ jobs:
         run: |
           echo "🔄 Falling back to Vercel endpoint..."
           
-          # Validate URL format
           if [[ ! $VERCEL_URL =~ ^https?:// ]]; then
             echo "❌ ERROR: VERCEL_URL must start with http:// or https://"
             exit 1
           fi
           
-          # Construct full API URL
           API_URL="${VERCEL_URL%/}/api/scout-direct"
           echo "📡 Calling: $API_URL"
           
-          # Set up curl options
           CURL_OPTS=(
             -X POST
             -H "Content-Type: application/json"
@@ -695,7 +729,6 @@ jobs:
             --retry-delay 5
           )
           
-          # Make the request
           if curl "${CURL_OPTS[@]}" "$API_URL"; then
             echo "✅ Vercel endpoint triggered successfully"
           else
@@ -708,6 +741,7 @@ jobs:
           echo "✅ GitHub Actions workflow completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "----------------------------------------"
           echo "🎯 ENHANCED FEATURES:"
+          echo "• Live Google Trends daily topics"
           echo "• Google AI Mode API integration"
           echo "• Google AI Overview API integration"
           echo "• Multi-source question extraction"
@@ -715,12 +749,11 @@ jobs:
           echo "----------------------------------------"
           echo "📊 Next steps:"
           echo "1. Check Discord for AI-enhanced topics"
-          echo "2. Topics now include AI-generated insights"
+          echo "2. Topics now include live trending data"
           echo "3. Better PAA question extraction"
           echo "4. Continue rapid Google indexing (<5 hours)"
           echo "----------------------------------------"
           
-          # Output status based on exit code
           if [ "${{ steps.scout.outputs.EXIT_CODE }}" = "0" ]; then
             echo "🎉 Enhanced AI scout executed successfully!"
             echo "🤖 AI APIs are now enriching your daily topics"

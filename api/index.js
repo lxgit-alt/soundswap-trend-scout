@@ -15,89 +15,171 @@ const {
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-// Dynamic query generation based on day of week
-function generateDailyQueries() {
+// Outline types with emojis
+const OUTLINE_TYPES = [
+  { name: "Technical Deep Dive", emoji: "🔬", description: "Specifications, features, technical analysis" },
+  { name: "Creative Applications", emoji: "🎨", description: "Practical uses for artists and producers" },
+  { name: "Industry Impact", emoji: "📈", description: "Market trends and business implications" },
+  { name: "Beginner-Friendly Guide", emoji: "👶", description: "Simplified explanations for newcomers" }
+];
+
+// Store for user sessions
+let userSessions = new Map();
+
+// ──────────────────────────────────────────────────────────────
+//  NEW: Fetch live trending topics from Google Trends
+// ──────────────────────────────────────────────────────────────
+async function fetchTrendingMusicTopics() {
+  try {
+    console.log('📈 Fetching Google Trends daily trending searches...');
+    
+    const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&api_key=${SERPAPI_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.error || !data.trending_searches) {
+      throw new Error(data.error || 'No trending data');
+    }
+
+    // Extract trending queries
+    const trendingQueries = data.trending_searches.map(item => item.query).filter(Boolean);
+    console.log(`Found ${trendingQueries.length} trending queries.`);
+
+    if (trendingQueries.length === 0) {
+      throw new Error('No trending queries returned');
+    }
+
+    // Use Gemini to select the 4 most music‑production relevant topics
+    const musicTopics = await filterMusicTopicsWithGemini(trendingQueries);
+    
+    // If Gemini fails or returns less than 4, supplement with keyword filtering
+    if (musicTopics.length < 4) {
+      const keywordFiltered = trendingQueries.filter(q => 
+        /music|song|producer|beat|audio|studio|instrument|album|concert|festival|vinyl|streaming/i.test(q)
+      );
+      const combined = [...new Set([...musicTopics, ...keywordFiltered])];
+      return combined.slice(0, 4);
+    }
+    
+    return musicTopics.slice(0, 4);
+  } catch (error) {
+    console.error('❌ Failed to fetch trending topics:', error.message);
+    return null; // triggers fallback
+  }
+}
+
+// Helper: use Gemini to pick music‑relevant trends
+async function filterMusicTopicsWithGemini(queries) {
+  try {
+    const prompt = `
+      From the following list of Google Trends queries, select exactly 4 that are most relevant to music production, audio engineering, music business, or music technology. 
+      Return ONLY a JSON array of strings, nothing else.
+      Queries: ${JSON.stringify(queries)}
+    `;
+    
+    const result = await model.generateContent(prompt);
+    const text = await result.response.text();
+    // Try to parse JSON array
+    const match = text.match(/\[.*\]/s);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+    return [];
+  } catch (e) {
+    console.error('Gemini filtering failed:', e);
+    return [];
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+//  UPDATED: Generate daily queries (now async, uses trends)
+// ──────────────────────────────────────────────────────────────
+async function generateDailyQueries() {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+  const dayOfWeek = now.getDay();
   const dayOfMonth = now.getDate();
-  const weekOfYear = Math.floor(dayOfMonth / 7) + 1;
-  const month = now.getMonth(); // 0-11
+  const month = now.getMonth();
   const year = now.getFullYear();
+
+  // Try to get live trending topics
+  let queries = await fetchTrendingMusicTopics();
   
-  // Monthly themes to prevent repetition
-  const monthlyThemes = [
-    'AI Music Production Tools',
-    'Music Gear Releases',
-    'Music Industry News',
-    'Audio Technology',
-    'Music Business Trends',
-    'Creative Production Techniques'
-  ];
-  
-  const theme = monthlyThemes[month % monthlyThemes.length];
-  
-  // Query pools for each category
-  const aiToolsQueries = [
-    `latest AI audio tools ${month + 1}/${year}`,
-    `AI music production software ${year}`,
-    `best AI plugins for producers ${month + 1}/${year}`,
-    `AI mastering tools reviews ${year}`,
-    `artificial intelligence in music production`,
-    `AI vocal processing ${month + 1} ${year}`,
-    `machine learning music composition`,
-    `AI beat making tools ${year}`
-  ];
-  
-  const gearQueries = [
-    `new music production gear ${month + 1}/${year}`,
-    `audio interface releases ${year}`,
-    `studio monitor reviews ${month + 1} ${year}`,
-    `MIDI controller latest models ${year}`,
-    `synthesizer new releases ${month + 1}/${year}`,
-    `microphones for home studio ${year}`,
-    `DAW updates ${month + 1} ${year}`,
-    `music production hardware ${year}`
-  ];
-  
-  const newsQueries = [
-    `music industry news ${month + 1}/${year}`,
-    `streaming services updates ${year}`,
-    `music copyright laws ${month + 1} ${year}`,
-    `artist revenue trends ${year}`,
-    `music marketing strategies ${month + 1}/${year}`,
-    `independent musician news ${year}`,
-    `record label developments ${month + 1} ${year}`,
-    `music distribution platforms ${year}`
-  ];
-  
-  const trendingQueries = [
-    `viral music production trends ${month + 1}/${year}`,
-    `what producers are talking about ${year}`,
-    `emerging music technologies ${month + 1} ${year}`,
-    `music production on social media ${year}`,
-    `creative workflows ${month + 1}/${year}`,
-    `music collaboration tools ${year}`,
-    `home studio setup trends ${month + 1} ${year}`,
-    `music education online ${year}`
-  ];
-  
-  // Rotate queries based on day
-  const dayIndex = dayOfMonth % 8;
-  const weekIndex = weekOfYear % 8;
-  const dayOfWeekIndex = dayOfWeek;
-  
-  // Generate 4 unique queries with rotating selection
-  const queries = [
-    aiToolsQueries[(dayIndex + dayOfWeekIndex) % aiToolsQueries.length],
-    gearQueries[(dayIndex + weekIndex) % gearQueries.length],
-    newsQueries[(dayOfMonth + dayOfWeekIndex) % newsQueries.length],
-    trendingQueries[(dayIndex + month) % trendingQueries.length]
-  ];
-  
+  // Fallback to static pools if trends fetch fails
+  if (!queries || queries.length < 4) {
+    console.log('Using static fallback queries');
+    const monthlyThemes = [
+      'AI Music Production Tools',
+      'Music Gear Releases',
+      'Music Industry News',
+      'Audio Technology',
+      'Music Business Trends',
+      'Creative Production Techniques'
+    ];
+    const theme = monthlyThemes[month % monthlyThemes.length];
+    
+    const aiToolsQueries = [
+      `latest AI audio tools ${month + 1}/${year}`,
+      `AI music production software ${year}`,
+      `best AI plugins for producers ${month + 1}/${year}`,
+      `AI mastering tools reviews ${year}`,
+      `artificial intelligence in music production`,
+      `AI vocal processing ${month + 1} ${year}`,
+      `machine learning music composition`,
+      `AI beat making tools ${year}`
+    ];
+    
+    const gearQueries = [
+      `new music production gear ${month + 1}/${year}`,
+      `audio interface releases ${year}`,
+      `studio monitor reviews ${month + 1} ${year}`,
+      `MIDI controller latest models ${year}`,
+      `synthesizer new releases ${month + 1}/${year}`,
+      `microphones for home studio ${year}`,
+      `DAW updates ${month + 1} ${year}`,
+      `music production hardware ${year}`
+    ];
+    
+    const newsQueries = [
+      `music industry news ${month + 1}/${year}`,
+      `streaming services updates ${year}`,
+      `music copyright laws ${month + 1} ${year}`,
+      `artist revenue trends ${year}`,
+      `music marketing strategies ${month + 1}/${year}`,
+      `independent musician news ${year}`,
+      `record label developments ${month + 1} ${year}`,
+      `music distribution platforms ${year}`
+    ];
+    
+    const trendingQueries = [
+      `viral music production trends ${month + 1}/${year}`,
+      `what producers are talking about ${year}`,
+      `emerging music technologies ${month + 1} ${year}`,
+      `music production on social media ${year}`,
+      `creative workflows ${month + 1}/${year}`,
+      `music collaboration tools ${year}`,
+      `home studio setup trends ${month + 1} ${year}`,
+      `music education online ${year}`
+    ];
+    
+    const dayIndex = dayOfMonth % 8;
+    const weekIndex = Math.floor(dayOfMonth / 7) % 8;
+    const dayOfWeekIndex = dayOfWeek;
+    
+    queries = [
+      aiToolsQueries[(dayIndex + dayOfWeekIndex) % aiToolsQueries.length],
+      gearQueries[(dayIndex + weekIndex) % gearQueries.length],
+      newsQueries[(dayOfMonth + dayOfWeekIndex) % newsQueries.length],
+      trendingQueries[(dayIndex + month) % trendingQueries.length]
+    ];
+  }
+
+  // Derive a theme from the first query (or you can keep a separate logic)
+  const theme = `Trending: ${queries[0]}`;
+
   console.log(`\n📅 Date: ${now.toISOString().split('T')[0]}`);
   console.log(`🎯 Theme: ${theme}`);
   console.log(`🔍 Generated queries:`, queries);
-  
+
   return {
     queries,
     theme,
@@ -110,17 +192,6 @@ function generateDailyQueries() {
   };
 }
 
-// Outline types with emojis
-const OUTLINE_TYPES = [
-  { name: "Technical Deep Dive", emoji: "🔬", description: "Specifications, features, technical analysis" },
-  { name: "Creative Applications", emoji: "🎨", description: "Practical uses for artists and producers" },
-  { name: "Industry Impact", emoji: "📈", description: "Market trends and business implications" },
-  { name: "Beginner-Friendly Guide", emoji: "👶", description: "Simplified explanations for newcomers" }
-];
-
-// Store for user sessions
-let userSessions = new Map();
-
 /**
  * Main handler for Vercel Edge Function
  */
@@ -130,7 +201,6 @@ export default async function handler(request) {
   
   console.log(`Incoming request: ${request.method} ${pathname}`);
   
-  // Set CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -138,12 +208,10 @@ export default async function handler(request) {
     'Content-Type': 'application/json'
   };
 
-  // Handle OPTIONS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers });
   }
 
-  // Route based on pathname
   if (pathname === '/api/interactions' && request.method === 'POST') {
     return await handleDiscordInteraction(request);
   }
@@ -153,7 +221,6 @@ export default async function handler(request) {
   }
   
   if (pathname === '/api/scout-direct' && request.method === 'POST') {
-    // Direct execution endpoint for GitHub Actions
     return await handleDirectScout(request);
   }
   
@@ -162,18 +229,19 @@ export default async function handler(request) {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'SoundSwap AI',
-      version: '5.0 - AI Mode + AI Overview APIs',
+      version: '5.1 - Live Google Trends Integration',
       features: [
+        'Live Google Trends daily topics',
         'Google AI Mode API integration',
         'Google AI Overview API integration',
         'Multi-source question extraction',
-        'AI-enhanced trend scoring',
-        'Dynamic daily topic rotation'
+        'AI-enhanced trend scoring'
       ],
       apis_active: [
         'Regular Google Search',
         'Google AI Mode (AI-generated results)',
-        'Google AI Overview (AI overview blocks)'
+        'Google AI Overview (AI overview blocks)',
+        'Google Trends'
       ],
       commands: [
         '/blog - Generate daily semantic SEO blog',
@@ -184,19 +252,20 @@ export default async function handler(request) {
   }
   
   if (pathname === '/' && request.method === 'GET') {
-    const { queries, theme } = generateDailyQueries();
+    // 👇 UPDATED: await generateDailyQueries()
+    const { queries, theme } = await generateDailyQueries();
     return new Response(JSON.stringify({
       status: 'online',
       service: 'SoundSwap AI Blog Generator',
-      version: '5.0 - AI Mode + AI Overview APIs',
+      version: '5.1 - Live Google Trends Integration',
       daily_theme: theme,
       today_queries: queries.slice(0, 2),
       features: [
+        'Live Google Trends daily topics',
         'Google AI Mode API integration',
         'Google AI Overview API integration',
         'AI-enhanced trend detection',
-        'Multi-source PAA extraction',
-        'Dynamic query rotation'
+        'Multi-source PAA extraction'
       ],
       indexed_stats: 'Previous blogs indexed in <5 hours',
       ai_apis: {
@@ -207,7 +276,6 @@ export default async function handler(request) {
     }), { status: 200, headers });
   }
 
-  // If no route matches, return 404
   return new Response(JSON.stringify({ 
     error: 'Not found',
     path: pathname,
@@ -232,36 +300,29 @@ async function handleDiscordInteraction(request) {
   try {
     console.log('Processing Discord interaction...');
     const body = await request.text();
-    
-    // Parse interaction
     const interaction = JSON.parse(body);
     
-    // Handle PING
     if (interaction.type === 1) {
-      console.log('Responding to Discord ping');
       return new Response(JSON.stringify({ type: 1 }), { 
         status: 200, 
         headers: { 'Content-Type': 'application/json' } 
       });
     }
     
-    // Handle APPLICATION_COMMAND
     if (interaction.type === 2) {
       const { data, token } = interaction;
       const commandName = data?.name;
       
       console.log(`Processing command: ${commandName}`);
       
-      // Handle /blog command
       if (commandName === 'blog') {
         console.log('Starting blog generation process...');
-        // Return deferred response immediately
         const response = new Response(JSON.stringify({ type: 5 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
         
-        // Process in background
+        // 👇 UPDATED: processBlogCommand now awaits generateDailyQueries inside
         processBlogCommand(token, data).catch(error => {
           console.error('Blog command error:', error);
           editOriginalResponse(token, `❌ Error: ${error.message?.slice(0, 100) || 'Unknown error'}`)
@@ -271,20 +332,17 @@ async function handleDiscordInteraction(request) {
         return response;
       }
       
-      // Handle /outlines command
       if (commandName === 'outlines') {
         const topic = data?.options?.find(opt => opt.name === 'topic')?.value || 
                      'latest AI music production trends 2026';
         
         console.log(`Processing outlines for topic: ${topic}`);
         
-        // Return deferred response immediately
         const response = new Response(JSON.stringify({ type: 5 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
         
-        // Process in background
         processOutlinesCommand(token, topic).catch(error => {
           console.error('Outlines command error:', error);
           editOriginalResponse(token, `❌ Error: ${error.message?.slice(0, 100) || 'Unknown error'}`)
@@ -295,8 +353,6 @@ async function handleDiscordInteraction(request) {
       }
     }
     
-    // Unknown interaction type
-    console.log('Unknown interaction type:', interaction.type);
     return new Response(JSON.stringify({ 
       type: 4, 
       data: { content: '❌ Unknown command' } 
@@ -324,7 +380,6 @@ async function handleDailyScout(request) {
   try {
     console.log('Starting daily scout...');
     
-    // Return response immediately
     return new Response(JSON.stringify({ 
       status: 'triggered', 
       message: 'Daily scout triggered. For actual execution, use /api/scout-direct POST endpoint.',
@@ -354,7 +409,6 @@ async function handleDirectScout(request) {
   try {
     console.log('Starting direct scout execution...');
     
-    // Verify authorization if CRON_SECRET is set
     if (CRON_SECRET) {
       const authHeader = request.headers.get('Authorization');
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -373,7 +427,6 @@ async function handleDirectScout(request) {
       }
     }
     
-    // Execute scout synchronously
     const result = await runEnhancedDailyScout();
     
     return new Response(JSON.stringify({ 
@@ -407,10 +460,10 @@ async function processBlogCommand(token, data) {
     await editOriginalResponse(token, "🎸 **Loading today's AI-enhanced topics...**");
     
     console.log('Getting SERP data for all topics...');
-    const { queries, theme, dateInfo } = generateDailyQueries();
+    // 👇 UPDATED: await generateDailyQueries()
+    const { queries, theme, dateInfo } = await generateDailyQueries();
     const dailyTopics = [];
     
-    // Get SERP data for all queries
     for (const query of queries) {
       try {
         const serpData = await getEnhancedSerpData(query, {
@@ -434,7 +487,6 @@ async function processBlogCommand(token, data) {
       }
     }
     
-    // Store session
     userSessions.set(token, {
       step: 'topic_selection',
       topics: dailyTopics,
@@ -443,14 +495,12 @@ async function processBlogCommand(token, data) {
       dateInfo
     });
     
-    // Build topic selection message
     let message = `🎸 **SOUNDSWAP DAILY BLOG TOPICS**\n`;
     message += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
     message += `🎯 Theme: ${theme}\n`;
     message += `🤖 AI APIs: Google AI Mode + AI Overview\n\n`;
     message += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
-    // Sort by score for better presentation
     dailyTopics.sort((a, b) => b.score - a.score);
     
     dailyTopics.forEach((topic, index) => {
@@ -523,11 +573,10 @@ async function runEnhancedDailyScout() {
   try {
     console.log('Executing enhanced daily scout...');
     
-    // Generate dynamic queries
-    const { queries, theme, dateInfo } = generateDailyQueries();
+    // 👇 UPDATED: await generateDailyQueries()
+    const { queries, theme, dateInfo } = await generateDailyQueries();
     const dailyTopics = [];
     
-    // Get SERP data for each query
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i];
       try {
@@ -539,13 +588,12 @@ async function runEnhancedDailyScout() {
           index: i
         });
         console.log(`Got AI-enhanced data for query ${i + 1}: ${query.slice(0, 40)}...`);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1500));
       } catch (error) {
         console.error(`Error processing query "${query}":`, error);
       }
     }
     
-    // Build report
     const dateStr = new Date().toISOString().split('T')[0];
     let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
     report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
@@ -553,7 +601,6 @@ async function runEnhancedDailyScout() {
     report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
     report += "**Choose ONE topic for today's semantic SEO blog:**\n\n";
     
-    // Sort by score for better presentation
     dailyTopics.sort((a, b) => b.score - a.score);
     
     for (let i = 0; i < dailyTopics.length; i++) {
@@ -576,6 +623,7 @@ async function runEnhancedDailyScout() {
     
     report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     report += "**🚀 ENHANCED FEATURES:**\n";
+    report += "- 📈 Live Google Trends daily topics\n";
     report += "- 🤖 Google AI Mode API (AI-generated results)\n";
     report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
     report += "- 🔍 Multi-source question extraction\n";
@@ -589,7 +637,6 @@ async function runEnhancedDailyScout() {
     report += "✅ *Previous blogs indexed in <5 hours*\n";
     report += "🤖 *AI-enhanced topics for better search visibility*";
     
-    // Send to Discord
     await sendToDiscordChannel(report);
     
     console.log('Enhanced daily scout completed successfully');
@@ -926,8 +973,17 @@ async function getRegularSerpData(query, context = {}) {
     
     trendScore = Math.min(Math.max(trendScore, 40), 95);
     
+    // Categorize the topic
+    let category = 'OTHER';
+    const queryLower = query.toLowerCase();
+    if (queryLower.includes('ai') || queryLower.includes('artificial')) category = '🤖 AI TOOLS';
+    else if (queryLower.includes('gear') || queryLower.includes('hardware') || queryLower.includes('equipment')) category = '🎛️ GEAR';
+    else if (queryLower.includes('news') || queryLower.includes('industry') || queryLower.includes('trend')) category = '📰 NEWS';
+    else if (queryLower.includes('production') || queryLower.includes('studio') || queryLower.includes('recording')) category = '🎚️ PRODUCTION';
+    
     return {
       query,
+      category,
       score: Math.round(trendScore),
       link: bestResult.link || 'https://example.com/no-link-found',
       title: bestResult.title || `Latest updates: ${query.slice(0, 50)}`,
