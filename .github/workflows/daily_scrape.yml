@@ -2,7 +2,7 @@ name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Daily at 09:00 UTC
+    - cron: '0 9 * * *'  # Daily at 09:00 UTC (unchanged)
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
       SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
       DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # <-- ADD THIS SECRET
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     
     steps:
       - name: Checkout Code
@@ -70,15 +70,15 @@ jobs:
             echo "⚠ CRON_SECRET is not set (optional for direct API call)"
           fi
 
-      - name: Run Enhanced Daily Scout with AI APIs
+      - name: Run Enhanced Daily Scout with AI APIs (Music Industry News Focus)
         id: scout
         continue-on-error: true
         run: |
-          echo "🚀 Starting enhanced daily scout script with AI APIs..."
+          echo "🚀 Starting enhanced daily scout script with AI APIs (Music Industry News)..."
           echo "Current directory: $(pwd)"
           echo "Node version: $(node --version)"
           
-          # Create enhanced scout script with Google Trends + AI Mode + AI Overview
+          # Create enhanced scout script with Google Trends (Music category) + AI Mode + AI Overview
           cat > scout-runner.js << 'EOF'
           import fetch from 'node-fetch';
           import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -94,13 +94,16 @@ jobs:
           const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
           
           // ──────────────────────────────────────────────────────────────
-          //  NEW: Fetch live trending topics from Google Trends
+          //  UPDATED: Fetch trending music industry news from Google Trends
+          //  - Uses Music category (ID 9) to focus on music-related trends
+          //  - Falls back to general music keywords if Gemini selection fails
           // ──────────────────────────────────────────────────────────────
           async function fetchTrendingMusicTopics() {
             try {
-              console.log('📈 Fetching Google Trends daily trending searches...');
+              console.log('📈 Fetching Google Trends trending searches in Music category...');
               
-              const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&api_key=${SERPAPI_KEY}`;
+              // Use category 9 (Music) to get music-specific trends
+              const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&cat=9&api_key=${SERPAPI_KEY}`;
               const response = await fetch(url);
               const data = await response.json();
               
@@ -109,17 +112,17 @@ jobs:
               }
 
               const trendingQueries = data.trending_searches.map(item => item.query).filter(Boolean);
-              console.log(`Found ${trendingQueries.length} trending queries.`);
+              console.log(`Found ${trendingQueries.length} trending music queries.`);
 
               if (trendingQueries.length === 0) {
                 throw new Error('No trending queries returned');
               }
 
-              const musicTopics = await filterMusicTopicsWithGemini(trendingQueries);
+              const musicTopics = await filterMusicNewsTopicsWithGemini(trendingQueries);
               
               if (musicTopics.length < 4) {
                 const keywordFiltered = trendingQueries.filter(q => 
-                  /music|song|producer|beat|audio|studio|instrument|album|concert|festival|vinyl|streaming/i.test(q)
+                  /music|song|producer|beat|audio|studio|instrument|album|concert|festival|vinyl|streaming|industry|news|release|tour|label|award/i.test(q)
                 );
                 const combined = [...new Set([...musicTopics, ...keywordFiltered])];
                 return combined.slice(0, 4);
@@ -127,15 +130,20 @@ jobs:
               
               return musicTopics.slice(0, 4);
             } catch (error) {
-              console.error('❌ Failed to fetch trending topics:', error.message);
+              console.error('❌ Failed to fetch trending music news:', error.message);
               return null;
             }
           }
           
-          async function filterMusicTopicsWithGemini(queries) {
+          async function filterMusicNewsTopicsWithGemini(queries) {
             try {
               const prompt = `
-                From the following list of Google Trends queries, select exactly 4 that are most relevant to music production, audio engineering, music business, or music technology. 
+                From the following list of Google Trends queries (filtered to Music category), select exactly 4 that are most relevant to:
+                - Music industry news (business, streaming, labels, releases)
+                - Music production and technology (AI tools, gear, software)
+                - Artist news (tours, new music, collaborations)
+                - Music culture and trends (genres, events, viral moments)
+                
                 Return ONLY a JSON array of strings, nothing else.
                 Queries: ${JSON.stringify(queries)}
               `;
@@ -154,7 +162,7 @@ jobs:
           }
           
           // ──────────────────────────────────────────────────────────────
-          //  UPDATED: Generate daily queries (async, uses trends)
+          //  UPDATED: Generate daily queries (async, uses music news trends)
           // ──────────────────────────────────────────────────────────────
           async function generateDailyQueries() {
             const now = new Date();
@@ -166,59 +174,59 @@ jobs:
             let queries = await fetchTrendingMusicTopics();
             
             if (!queries || queries.length < 4) {
-              console.log('Using static fallback queries');
+              console.log('Using static fallback queries (music news focused)');
               const monthlyThemes = [
-                'AI Music Production Tools',
+                'AI Music Production Tools News',
                 'Music Gear Releases',
                 'Music Industry News',
-                'Audio Technology',
+                'Audio Technology Updates',
                 'Music Business Trends',
                 'Creative Production Techniques'
               ];
               const theme = monthlyThemes[month % monthlyThemes.length];
               
               const aiToolsQueries = [
-                `latest AI audio tools ${month + 1}/${year}`,
-                `AI music production software ${year}`,
-                `best AI plugins for producers ${month + 1}/${year}`,
-                `AI mastering tools reviews ${year}`,
-                `artificial intelligence in music production`,
-                `AI vocal processing ${month + 1} ${year}`,
-                `machine learning music composition`,
-                `AI beat making tools ${year}`
+                `latest AI music industry news ${month + 1}/${year}`,
+                `AI music production software news ${year}`,
+                `best AI plugins for producers reviews ${month + 1}/${year}`,
+                `AI mastering tools news ${year}`,
+                `artificial intelligence in music production news`,
+                `AI vocal processing updates ${month + 1} ${year}`,
+                `machine learning music composition news`,
+                `AI beat making tools reviews ${year}`
               ];
               
               const gearQueries = [
-                `new music production gear ${month + 1}/${year}`,
-                `audio interface releases ${year}`,
+                `new music production gear releases ${month + 1}/${year}`,
+                `audio interface news ${year}`,
                 `studio monitor reviews ${month + 1} ${year}`,
                 `MIDI controller latest models ${year}`,
                 `synthesizer new releases ${month + 1}/${year}`,
-                `microphones for home studio ${year}`,
+                `microphones for home studio news ${year}`,
                 `DAW updates ${month + 1} ${year}`,
-                `music production hardware ${year}`
+                `music production hardware news ${year}`
               ];
               
               const newsQueries = [
                 `music industry news ${month + 1}/${year}`,
                 `streaming services updates ${year}`,
-                `music copyright laws ${month + 1} ${year}`,
+                `music copyright laws news ${month + 1} ${year}`,
                 `artist revenue trends ${year}`,
-                `music marketing strategies ${month + 1}/${year}`,
+                `music marketing strategies news ${month + 1}/${year}`,
                 `independent musician news ${year}`,
                 `record label developments ${month + 1} ${year}`,
-                `music distribution platforms ${year}`
+                `music distribution platforms news ${year}`
               ];
               
               const trendingQueries = [
                 `viral music production trends ${month + 1}/${year}`,
                 `what producers are talking about ${year}`,
                 `emerging music technologies ${month + 1} ${year}`,
-                `music production on social media ${year}`,
+                `music production on social media news ${year}`,
                 `creative workflows ${month + 1}/${year}`,
-                `music collaboration tools ${year}`,
+                `music collaboration tools news ${year}`,
                 `home studio setup trends ${month + 1} ${year}`,
-                `music education online ${year}`
+                `music education online news ${year}`
               ];
               
               const dayIndex = dayOfMonth % 8;
@@ -233,7 +241,7 @@ jobs:
               ];
             }
 
-            const theme = `Trending: ${queries[0]}`;
+            const theme = `Music Industry News: ${queries[0]}`;
 
             console.log(`\n📅 Date: ${now.toISOString().split('T')[0]}`);
             console.log(`🎯 Theme: ${theme}`);
@@ -598,7 +606,7 @@ jobs:
           
           async function runEnhancedDailyScout() {
             try {
-              console.log('🎯 Starting enhanced daily scout with AI APIs...');
+              console.log('🎯 Starting enhanced daily scout with AI APIs (Music Industry News focus)...');
               
               const { queries, theme, dateInfo } = await generateDailyQueries();
               const dailyTopics = [];
@@ -624,7 +632,7 @@ jobs:
               }
               
               const dateStr = new Date().toISOString().split('T')[0];
-              let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT**\n`;
+              let report = `🎸 **SOUNDSWAP DAILY BLOG SCOUT (Music Industry News)**\n`;
               report += `📅 ${dateInfo.dayOfWeek}, ${dateInfo.month}/${dateInfo.dayOfMonth}/${dateInfo.year}\n`;
               report += `🎯 Monthly Theme: ${theme}\n`;
               report += `🤖 AI APIs: Google AI Mode + AI Overview Enabled\n\n`;
@@ -652,7 +660,8 @@ jobs:
               
               report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
               report += "**🚀 ENHANCED FEATURES:**\n";
-              report += "- 📈 Live Google Trends daily topics\n";
+              report += "- 📈 Live Google Trends music category (ID 9)\n";
+              report += "- 🎵 Music industry news focus\n";
               report += "- 🤖 Google AI Mode API (AI-generated results)\n";
               report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
               report += "- 🔍 Multi-source question extraction\n";
@@ -740,23 +749,24 @@ jobs:
         run: |
           echo "✅ GitHub Actions workflow completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "----------------------------------------"
-          echo "🎯 ENHANCED FEATURES:"
-          echo "• Live Google Trends daily topics"
+          echo "🎯 ENHANCED FEATURES (Music Industry News Focus):"
+          echo "• Live Google Trends music category (ID 9)"
+          echo "• Music industry news topic selection"
           echo "• Google AI Mode API integration"
           echo "• Google AI Overview API integration"
           echo "• Multi-source question extraction"
           echo "• AI-enhanced trend scoring"
           echo "----------------------------------------"
           echo "📊 Next steps:"
-          echo "1. Check Discord for AI-enhanced topics"
-          echo "2. Topics now include live trending data"
+          echo "1. Check Discord for AI-enhanced music industry topics"
+          echo "2. Topics now include live trending music news"
           echo "3. Better PAA question extraction"
           echo "4. Continue rapid Google indexing (<5 hours)"
           echo "----------------------------------------"
           
           if [ "${{ steps.scout.outputs.EXIT_CODE }}" = "0" ]; then
             echo "🎉 Enhanced AI scout executed successfully!"
-            echo "🤖 AI APIs are now enriching your daily topics"
+            echo "🤖 AI APIs are now enriching your daily music news topics"
           else
             echo "⚠ Scout script may have encountered issues"
             echo "Check the logs above for error details"
