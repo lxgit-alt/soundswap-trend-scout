@@ -28,47 +28,58 @@ let userSessions = new Map();
 
 // ──────────────────────────────────────────────────────────────
 //  UPDATED: Fetch trending music industry news from Google Trends
-//  - Uses Music category (ID 9) to focus on music-related trends
+//  - Uses Music & Audio category (cat=35) to focus on music trends
 //  - Falls back to general music keywords if Gemini selection fails
 // ──────────────────────────────────────────────────────────────
 async function fetchTrendingMusicTopics() {
   try {
-    console.log('📈 Fetching Google Trends trending searches in Music category...');
+    console.log('📈 Fetching Google Trends - Music & Audio category (cat=35)...');
     
-    // Use category 9 (Music) to get music-specific trends
-    const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&cat=9&api_key=${SERPAPI_KEY}`;
+    // ✅ FIX: cat=35 is Music & Audio, not 9
+    const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&cat=35&api_key=${SERPAPI_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
+
+    // ✅ ADD: log the raw response so you can see what's coming back
+    console.log('📊 Raw Trends API response:', JSON.stringify(data).slice(0, 500));
     
     if (data.error || !data.trending_searches) {
+      console.error('❌ Trends API error or no data:', data.error || 'missing trending_searches');
       throw new Error(data.error || 'No trending data');
     }
 
-    // Extract trending queries
-    const trendingQueries = data.trending_searches.map(item => item.query).filter(Boolean);
-    console.log(`Found ${trendingQueries.length} trending music queries.`);
+    const trendingQueries = data.trending_searches
+      .map(item => item.query || item.title?.query)  // ✅ handle both response shapes
+      .filter(Boolean);
+      
+    console.log(`✅ Found ${trendingQueries.length} trending queries:`, trendingQueries);
 
-    if (trendingQueries.length === 0) {
-      throw new Error('No trending queries returned');
-    }
+    if (trendingQueries.length === 0) throw new Error('No trending queries returned');
 
-    // Use Gemini to select the 4 most relevant music industry news topics
     const musicTopics = await filterMusicNewsTopicsWithGemini(trendingQueries);
-    
-    // If Gemini fails or returns less than 4, supplement with keyword filtering
+    console.log('🤖 Gemini selected topics:', musicTopics);
+
     if (musicTopics.length < 4) {
-      // More aggressive filtering for news and industry terms
-      const keywordFiltered = trendingQueries.filter(q => 
-        /music|song|producer|beat|audio|studio|instrument|album|concert|festival|vinyl|streaming|industry|news|release|tour|label|award/i.test(q)
+      console.log('⚠️ Gemini returned fewer than 4 — using keyword filter on raw trends');
+      const keywordFiltered = trendingQueries.filter(q =>
+        /music|song|producer|beat|audio|studio|album|concert|festival|streaming|label|release|tour|award|artist|rapper|singer|band/i.test(q)
       );
+      console.log('🔍 Keyword-filtered topics:', keywordFiltered);
       const combined = [...new Set([...musicTopics, ...keywordFiltered])];
+      
+      // ✅ If still not enough, just use the raw trending queries directly
+      if (combined.length < 2) {
+        console.log('⚠️ Not enough music-specific results — using top raw trends');
+        return trendingQueries.slice(0, 4);
+      }
       return combined.slice(0, 4);
     }
     
     return musicTopics.slice(0, 4);
+
   } catch (error) {
-    console.error('❌ Failed to fetch trending music news:', error.message);
-    return null; // triggers fallback
+    console.error('❌ fetchTrendingMusicTopics failed:', error.message);
+    return null;
   }
 }
 
@@ -88,6 +99,7 @@ async function filterMusicNewsTopicsWithGemini(queries) {
     
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
+    console.log('🤖 Gemini raw response:', text.slice(0, 300)); // ✅ ADD THIS
     // Try to parse JSON array
     const match = text.match(/\[.*\]/s);
     if (match) {
@@ -95,7 +107,7 @@ async function filterMusicNewsTopicsWithGemini(queries) {
     }
     return [];
   } catch (e) {
-    console.error('Gemini filtering failed:', e);
+    console.error('❌ Gemini filtering failed:', e.message);
     return [];
   }
 }
@@ -238,9 +250,9 @@ export default async function handler(request) {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'SoundSwap AI',
-      version: '5.2 - Music Industry News Scout',
+      version: '5.3 - Music & Audio Trends (cat=35)',
       features: [
-        'Live Google Trends music category (ID 9)',
+        'Live Google Trends Music & Audio category (cat=35)',
         'Music industry news focus',
         'Google AI Mode API integration',
         'Google AI Overview API integration',
@@ -251,7 +263,7 @@ export default async function handler(request) {
         'Regular Google Search',
         'Google AI Mode (AI-generated results)',
         'Google AI Overview (AI overview blocks)',
-        'Google Trends (Music category)'
+        'Google Trends (Music & Audio category)'
       ],
       commands: [
         '/blog - Generate daily semantic SEO blog',
@@ -267,11 +279,11 @@ export default async function handler(request) {
     return new Response(JSON.stringify({
       status: 'online',
       service: 'SoundSwap AI Blog Generator',
-      version: '5.2 - Music Industry News Scout',
+      version: '5.3 - Music & Audio Trends (cat=35)',
       daily_theme: theme,
       today_queries: queries.slice(0, 2),
       features: [
-        'Live Google Trends music category (ID 9)',
+        'Live Google Trends Music & Audio category (cat=35)',
         'Music industry news focus',
         'Google AI Mode API integration',
         'Google AI Overview API integration',
@@ -634,7 +646,7 @@ async function runEnhancedDailyScout() {
     
     report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     report += "**🚀 ENHANCED FEATURES:**\n";
-    report += "- 📈 Live Google Trends music category (ID 9)\n";
+    report += "- 📈 Live Google Trends Music & Audio category (cat=35)\n";
     report += "- 🎵 Music industry news focus\n";
     report += "- 🤖 Google AI Mode API (AI-generated results)\n";
     report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
