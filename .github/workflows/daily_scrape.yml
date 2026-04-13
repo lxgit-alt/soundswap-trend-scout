@@ -73,35 +73,50 @@ jobs:
           if [[ ! "$URL" =~ ^https?:// ]]; then
             URL="https://$URL"
           fi
-          API_URL="${URL%/}/api/scout-direct"
-          echo "📡 Endpoint: $API_URL"
+          
+          # Remove trailing slash
+          URL="${URL%/}"
+          API_URL="${URL}/api/scout-direct"
+          
+          echo "📡 Endpoint URL constructed (masked for security)"
           
           # Call the endpoint with CRON_SECRET as Bearer token
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+          echo "🔍 Sending POST request to endpoint..."
+          RESPONSE=$(curl -v -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 120 \
+            --write-out "\n%{http_code}" \
             "$API_URL" 2>&1)
           
-          # Extract HTTP code (last line)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
+          CURL_EXIT=$?
+          echo "Curl exit code: $CURL_EXIT"
           
-          echo "HTTP Status: $HTTP_CODE"
-          echo "Response body: $BODY"
+          # Split response and HTTP code more carefully
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "HTTP Status Code: [$HTTP_CODE]"
+          echo "Response Body (last 500 chars):"
+          echo "$BODY" | tail -c 500
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           
           # Validate HTTP_CODE is a number
-          if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
-            echo "❌ ERROR: Invalid HTTP response code: $HTTP_CODE"
-            echo "Full response: $RESPONSE"
-            exit 1
+          if ! [[ "$HTTP_CODE" =~ ^[0-9]{3}$ ]]; then
+            echo "❌ ERROR: Invalid HTTP response code format: [$HTTP_CODE]"
+            echo "Curl exit code was: $CURL_EXIT"
+            echo "Full curl response:"
+            echo "$RESPONSE"
+            exit 3
           fi
           
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Scout endpoint executed successfully"
+          # Check response
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Scout endpoint executed successfully (HTTP 200)"
             echo "status=success" >> $GITHUB_OUTPUT
           else
-            echo "❌ Scout endpoint failed with HTTP $HTTP_CODE"
+            echo "❌ Scout endpoint returned HTTP $HTTP_CODE (not 200)"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
