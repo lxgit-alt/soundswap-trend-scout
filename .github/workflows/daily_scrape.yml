@@ -55,6 +55,8 @@ jobs:
       - name: Trigger Vercel Scout Endpoint (with fixes applied)
         id: scout
         run: |
+          set -x  # Enable command echoing for debugging
+          
           echo "🚀 Calling Vercel endpoint with Google News + two‑step AI Overview..."
           
           # Validate required variables
@@ -78,37 +80,55 @@ jobs:
           URL="${URL%/}"
           API_URL="${URL}/api/scout-direct"
           
-          echo "📡 Endpoint URL constructed (masked for security)"
+          echo "📡 Endpoint URL constructed"
+          echo "URL length: ${#API_URL}"
           
-          # Call the endpoint with CRON_SECRET as Bearer token
-          echo "🔍 Sending POST request to endpoint..."
-          RESPONSE=$(curl -v -X POST \
+          # Use temp file to preserve output
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE_FILE=$(mktemp)
+          
+          echo "🔍 Sending POST request..."
+          
+          # Simpler curl without verbose for now
+          curl -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 120 \
-            --write-out "\n%{http_code}" \
-            "$API_URL" 2>&1)
+            -o "$RESPONSE_FILE" \
+            -w "%{http_code}" \
+            "$API_URL" > "$HTTP_CODE_FILE" 2>&1 || {
+              echo "❌ Curl command failed with exit code: $?"
+              echo "Response file contents:"
+              cat "$RESPONSE_FILE" || echo "(empty)"
+              echo "HTTP code file contents:"
+              cat "$HTTP_CODE_FILE" || echo "(empty)"
+              rm -f "$RESPONSE_FILE" "$HTTP_CODE_FILE"
+              exit 1
+            }
           
-          CURL_EXIT=$?
-          echo "Curl exit code: $CURL_EXIT"
-          
-          # Split response and HTTP code more carefully
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
+          HTTP_CODE=$(cat "$HTTP_CODE_FILE")
+          BODY=$(cat "$RESPONSE_FILE")
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✓ Curl completed successfully"
           echo "HTTP Status Code: [$HTTP_CODE]"
-          echo "Response Body (last 500 chars):"
-          echo "$BODY" | tail -c 500
+          echo "Response length: ${#BODY} bytes"
+          echo "Response (first 1000 chars):"
+          echo "$BODY" | head -c 1000
+          echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           
-          # Validate HTTP_CODE is a number
+          rm -f "$RESPONSE_FILE" "$HTTP_CODE_FILE"
+          
+          # Validate HTTP_CODE
+          if [ -z "$HTTP_CODE" ]; then
+            echo "❌ ERROR: HTTP_CODE is empty"
+            exit 1
+          fi
+          
           if ! [[ "$HTTP_CODE" =~ ^[0-9]{3}$ ]]; then
-            echo "❌ ERROR: Invalid HTTP response code format: [$HTTP_CODE]"
-            echo "Curl exit code was: $CURL_EXIT"
-            echo "Full curl response:"
-            echo "$RESPONSE"
-            exit 3
+            echo "❌ ERROR: Invalid HTTP code format: [$HTTP_CODE]"
+            exit 1
           fi
           
           # Check response
@@ -116,7 +136,7 @@ jobs:
             echo "✅ Scout endpoint executed successfully (HTTP 200)"
             echo "status=success" >> $GITHUB_OUTPUT
           else
-            echo "❌ Scout endpoint returned HTTP $HTTP_CODE (not 200)"
+            echo "❌ Scout endpoint returned HTTP $HTTP_CODE"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
