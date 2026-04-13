@@ -57,6 +57,17 @@ jobs:
         run: |
           echo "🚀 Calling Vercel endpoint with Google News + two‑step AI Overview..."
           
+          # Validate required variables
+          if [ -z "$VERCEL_URL" ]; then
+            echo "❌ ERROR: VERCEL_URL is not set"
+            exit 1
+          fi
+          
+          if [ -z "$CRON_SECRET" ]; then
+            echo "❌ ERROR: CRON_SECRET is not set"
+            exit 1
+          fi
+          
           # Normalize VERCEL_URL (add https:// if missing)
           URL="$VERCEL_URL"
           if [[ ! "$URL" =~ ^https?:// ]]; then
@@ -70,13 +81,21 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 120 \
-            "$API_URL")
+            "$API_URL" 2>&1)
           
+          # Extract HTTP code (last line)
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
           
           echo "HTTP Status: $HTTP_CODE"
           echo "Response body: $BODY"
+          
+          # Validate HTTP_CODE is a number
+          if ! [[ "$HTTP_CODE" =~ ^[0-9]+$ ]]; then
+            echo "❌ ERROR: Invalid HTTP response code: $HTTP_CODE"
+            echo "Full response: $RESPONSE"
+            exit 1
+          fi
           
           if [ "$HTTP_CODE" -eq 200 ]; then
             echo "✅ Scout endpoint executed successfully"
