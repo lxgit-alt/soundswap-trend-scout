@@ -27,75 +27,101 @@ const OUTLINE_TYPES = [
 let userSessions = new Map();
 
 // ──────────────────────────────────────────────────────────────
-//  UPDATED: Fetch trending music industry news from Google Trends
-//  - Uses Music category (ID 9) to focus on music-related trends
-//  - Falls back to general music keywords if Gemini selection fails
+//  UPDATED: Fetch daily music industry news from Google News
+//  - Uses google_news engine to get actual breaking headlines
+//  - Uses Gemini to distill headlines into 4 search queries
+//  - Better for real current events vs historical search patterns
 // ──────────────────────────────────────────────────────────────
 async function fetchTrendingMusicTopics() {
   try {
-    console.log('📈 Fetching Google Trends trending searches in Music category...');
+    console.log('📰 Fetching breaking music industry news from Google News...');
     
-    // Use category 9 (Music) to get music-specific trends
-    const url = `https://serpapi.com/search?engine=google_trends_trending_searches&geo=US&cat=9&api_key=${SERPAPI_KEY}`;
-    const response = await fetch(url);
+    // Use Google News engine with music industry keywords
+    const newsUrl = `https://serpapi.com/search?engine=google_news&q=music+industry+news&num=20&api_key=${SERPAPI_KEY}`;
+    const response = await fetch(newsUrl);
     const data = await response.json();
     
-    if (data.error || !data.trending_searches) {
-      throw new Error(data.error || 'No trending data');
+    if (data.error || !data.news_results) {
+      throw new Error(data.error || 'No news data');
     }
 
-    // Extract trending queries
-    const trendingQueries = data.trending_searches.map(item => item.query).filter(Boolean);
-    console.log(`Found ${trendingQueries.length} trending music queries.`);
-
-    if (trendingQueries.length === 0) {
-      throw new Error('No trending queries returned');
-    }
-
-    // Use Gemini to select the 4 most relevant music industry news topics
-    const musicTopics = await filterMusicNewsTopicsWithGemini(trendingQueries);
+    // Extract headlines and snippets
+    const headlines = data.news_results
+      .slice(0, 15)
+      .map(item => ({
+        title: item.title,
+        snippet: item.snippet,
+        source: item.source
+      }))
+      .filter(h => h.title && h.title.length > 0);
     
-    // If Gemini fails or returns less than 4, supplement with keyword filtering
-    if (musicTopics.length < 4) {
-      // More aggressive filtering for news and industry terms
-      const keywordFiltered = trendingQueries.filter(q => 
-        /music|song|producer|beat|audio|studio|instrument|album|concert|festival|vinyl|streaming|industry|news|release|tour|label|award/i.test(q)
-      );
-      const combined = [...new Set([...musicTopics, ...keywordFiltered])];
-      return combined.slice(0, 4);
+    console.log(`Found ${headlines.length} breaking music news headlines.`);
+
+    if (headlines.length === 0) {
+      throw new Error('No headlines returned');
+    }
+
+    // Use Gemini to distill headlines into 4 searchable queries
+    const musicTopics = await distillHeadlinesIntoQueries(headlines);
+    
+    if (musicTopics && musicTopics.length >= 4) {
+      return musicTopics.slice(0, 4);
+    }
+    
+    // Fallback: if Gemini fails, extract keywords from headlines
+    if (!musicTopics || musicTopics.length < 4) {
+      const fallbackQueries = headlines.map(h => {
+        // Extract key terms from title
+        const terms = h.title
+          .replace(/[^a-zA-Z0-9\s]/g, '')
+          .split(' ')
+          .filter(word => word.length > 3);
+        return terms.slice(0, 3).join(' ');
+      }).filter(q => q.length > 0);
+      
+      return [...new Set(fallbackQueries)].slice(0, 4);
     }
     
     return musicTopics.slice(0, 4);
   } catch (error) {
-    console.error('❌ Failed to fetch trending music news:', error.message);
+    console.error('❌ Failed to fetch breaking music news:', error.message);
     return null; // triggers fallback
   }
 }
 
-// Helper: use Gemini to pick music industry news topics
-async function filterMusicNewsTopicsWithGemini(queries) {
+// Helper: use Gemini to convert news headlines into search queries
+async function distillHeadlinesIntoQueries(headlines) {
   try {
+    const headlineTexts = headlines
+      .map((h, i) => `${i+1}. [${h.source}] ${h.title}${h.snippet ? ': ' + h.snippet.substring(0, 100) : ''}`)
+      .join('\n');
+    
     const prompt = `
-      From the following list of Google Trends queries (filtered to Music category), select exactly 4 that are most relevant to:
-      - Music industry news (business, streaming, labels, releases)
-      - Music production and technology (AI tools, gear, software)
-      - Artist news (tours, new music, collaborations)
-      - Music culture and trends (genres, events, viral moments)
-      
-      Return ONLY a JSON array of strings, nothing else.
-      Queries: ${JSON.stringify(queries)}
-    `;
+You are a music industry analyst. Based on these breaking news headlines, create exactly 4 SEO-friendly search queries that music producers and music tech enthusiasts would search for. These queries should:
+- Focus on actionable music industry topics
+- Be relevant to music production, technology, business, or artist news
+- Be suitable for semantic SEO blog posts
+- Be 2-5 words long
+- Reflect the actual news stories
+
+Headlines:
+${headlineTexts}
+
+Return ONLY a JSON array of 4 strings (search queries), nothing else. Example format: ["query 1", "query 2", "query 3", "query 4"]`;
     
     const result = await model.generateContent(prompt);
     const text = await result.response.text();
+    
     // Try to parse JSON array
     const match = text.match(/\[.*\]/s);
     if (match) {
-      return JSON.parse(match[0]);
+      const queries = JSON.parse(match[0]);
+      console.log('✅ Distilled headlines into queries:', queries);
+      return Array.isArray(queries) ? queries : [];
     }
     return [];
   } catch (e) {
-    console.error('Gemini filtering failed:', e);
+    console.error('Gemini headline distillation failed:', e);
     return [];
   }
 }
@@ -238,20 +264,21 @@ export default async function handler(request) {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       service: 'SoundSwap AI',
-      version: '5.2 - Music Industry News Scout',
+      version: '5.3 - Breaking Music News Scout',
       features: [
-        'Live Google Trends music category (ID 9)',
+        'Live Google News headlines (Music category)',
+        'Gemini-powered headline distillation',
         'Music industry news focus',
         'Google AI Mode API integration',
-        'Google AI Overview API integration',
+        'Google AI Overview API integration with page_token',
         'Multi-source question extraction',
         'AI-enhanced trend scoring'
       ],
       apis_active: [
+        'Google News (Breaking headlines)',
         'Regular Google Search',
         'Google AI Mode (AI-generated results)',
-        'Google AI Overview (AI overview blocks)',
-        'Google Trends (Music category)'
+        'Google AI Overview (AI overview blocks with page_token)'
       ],
       commands: [
         '/blog - Generate daily semantic SEO blog',
@@ -267,15 +294,16 @@ export default async function handler(request) {
     return new Response(JSON.stringify({
       status: 'online',
       service: 'SoundSwap AI Blog Generator',
-      version: '5.2 - Music Industry News Scout',
+      version: '5.3 - Breaking Music News Scout',
       daily_theme: theme,
       today_queries: queries.slice(0, 2),
       features: [
-        'Live Google Trends music category (ID 9)',
+        'Live Google News headlines (breaking stories)',
+        'Gemini-powered headline-to-query distillation',
         'Music industry news focus',
         'Google AI Mode API integration',
-        'Google AI Overview API integration',
-        'AI-enhanced trend detection',
+        'Google AI Overview API with page_token',
+        'AI-enhanced topic detection',
         'Multi-source PAA extraction'
       ],
       indexed_stats: 'Previous blogs indexed in <5 hours',
@@ -633,11 +661,12 @@ async function runEnhancedDailyScout() {
     }
     
     report += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-    report += "**🚀 ENHANCED FEATURES:**\n";
-    report += "- 📈 Live Google Trends music category (ID 9)\n";
-    report += "- 🎵 Music industry news focus\n";
+    report += "**🚀 ENHANCED FEATURES (v5.3):**\n";
+    report += "- 📰 Live Google News (Breaking music headlines)\n";
+    report += "- 🤖 Gemini-powered headline distillation\n";
+    report += "- 🎵 Music industry news focus with real events\n";
     report += "- 🤖 Google AI Mode API (AI-generated results)\n";
-    report += "- 🧠 Google AI Overview API (AI overview blocks)\n";
+    report += "- 🧠 Google AI Overview API (with page_token extraction)\n";
     report += "- 🔍 Multi-source question extraction\n";
     report += "- 📈 AI-enhanced trend scoring\n\n";
     report += "**💡 BLOG GENERATION INSTRUCTIONS:**\n";
@@ -647,7 +676,7 @@ async function runEnhancedDailyScout() {
     report += "4. Get full semantic SEO blog with PAA → H3 headers!\n\n";
     report += "⏱️ *Only 1 high-quality blog per day for maximum SEO impact*\n";
     report += "✅ *Previous blogs indexed in <5 hours*\n";
-    report += "🤖 *AI-enhanced topics for better search visibility*";
+    report += "🤖 *AI-generated topics tied to real current music news events*";
     
     await sendToDiscordChannel(report);
     
@@ -700,13 +729,35 @@ async function getGoogleAIModeData(query) {
 
 /**
  * Google AI Overview API - For AI Overview blocks
+ * UPDATED: First fetches regular search to extract page_token, then calls overview endpoint
  */
 async function getGoogleAIOverviewData(query) {
   try {
     console.log(`🧠 Fetching Google AI Overview data for: ${query.slice(0, 40)}...`);
     
-    const url = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
-    const response = await fetch(url);
+    // Step 1: Get regular search first to extract page_token
+    console.log(`  → Step 1: Getting page_token from regular search...`);
+    const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&num=10&api_key=${SERPAPI_KEY}`;
+    const searchResponse = await fetch(searchUrl);
+    const searchData = await searchResponse.json();
+    
+    if (searchData.error) {
+      console.log(`❌ Initial search failed: ${searchData.error}`);
+      return null;
+    }
+    
+    // Extract page_token from search results
+    const pageToken = searchData.serpapi_pagination?.next_page_token;
+    if (!pageToken) {
+      console.log(`⚠️ No page_token found in search results`);
+      return null;
+    }
+    
+    console.log(`  → Step 2: Calling AI Overview endpoint with page_token...`);
+    
+    // Step 2: Call AI Overview endpoint with page_token
+    const aoUrl = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
+    const response = await fetch(aoUrl);
     const data = await response.json();
     
     if (data.error) {
