@@ -2,8 +2,8 @@ name: SoundSwap Daily Blog Scout
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Daily at 09:00 UTC (unchanged)
-  workflow_dispatch:  # Allows manual triggering
+    - cron: '0 9 * * *'  # Daily at 09:00 UTC
+  workflow_dispatch:      # Allows manual triggering
 
 jobs:
   daily-blog-scout:
@@ -33,7 +33,6 @@ jobs:
         run: |
           echo "Checking environment variables..."
           
-          # Check required variables
           REQUIRED_VARS=("SERPAPI_KEY" "DISCORD_BOT_TOKEN" "DISCORD_CHANNEL_ID" "GEMINI_API_KEY")
           ALL_SET=true
           
@@ -57,7 +56,6 @@ jobs:
             exit 1
           fi
           
-          # Check optional variables
           if [ -n "$VERCEL_URL" ]; then
             echo "✓ VERCEL_URL is set (length: ${#VERCEL_URL} chars)"
           else
@@ -78,7 +76,7 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "Node version: $(node --version)"
           
-          # Create enhanced scout script with Google Trends (Music category) + AI Mode + AI Overview
+          # Create enhanced scout script (heredoc with proper indentation fix)
           cat > scout-runner.js << 'EOF'
           import fetch from 'node-fetch';
           import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -95,15 +93,11 @@ jobs:
           
           // ──────────────────────────────────────────────────────────────
           //  UPDATED: Fetch daily music industry news from Google News
-          //  - Uses google_news engine to get actual breaking headlines
-          //  - Uses Gemini to distill headlines into 4 search queries
-          //  - Better for real current events vs historical search patterns
           // ──────────────────────────────────────────────────────────────
           async function fetchTrendingMusicTopics() {
             try {
               console.log('📰 Fetching breaking music industry news from Google News...');
               
-              // Use Google News engine with music industry keywords
               const newsUrl = `https://serpapi.com/search?engine=google_news&q=music+industry+news&num=20&api_key=${SERPAPI_KEY}`;
               const response = await fetch(newsUrl);
               const data = await response.json();
@@ -111,8 +105,7 @@ jobs:
               if (data.error || !data.news_results) {
                 throw new Error(data.error || 'No news data');
               }
-
-              // Extract headlines and snippets
+          
               const headlines = data.news_results
                 .slice(0, 15)
                 .map(item => ({
@@ -123,22 +116,19 @@ jobs:
                 .filter(h => h.title && h.title.length > 0);
               
               console.log(`Found ${headlines.length} breaking music news headlines.`);
-
+          
               if (headlines.length === 0) {
                 throw new Error('No headlines returned');
               }
-
-              // Use Gemini to distill headlines into 4 searchable queries
+          
               const musicTopics = await distillHeadlinesIntoQueries(headlines);
               
               if (musicTopics && musicTopics.length >= 4) {
                 return musicTopics.slice(0, 4);
               }
               
-              // Fallback: if Gemini fails, extract keywords from headlines
               if (!musicTopics || musicTopics.length < 4) {
                 const fallbackQueries = headlines.map(h => {
-                  // Extract key terms from title
                   const terms = h.title
                     .replace(/[^a-zA-Z0-9 ]/g, '')
                     .split(' ')
@@ -156,7 +146,6 @@ jobs:
             }
           }
           
-          // Helper: use Gemini to convert news headlines into search queries
           async function distillHeadlinesIntoQueries(headlines) {
             try {
               const headlineTexts = headlines
@@ -164,22 +153,21 @@ jobs:
                 .join('\n');
               
               const prompt = `
-You are a music industry analyst. Based on these breaking news headlines, create exactly 4 SEO-friendly search queries that music producers and music tech enthusiasts would search for. These queries should:
-- Focus on actionable music industry topics
-- Be relevant to music production, technology, business, or artist news
-- Be suitable for semantic SEO blog posts
-- Be 2-5 words long
-- Reflect the actual news stories
-
-Headlines:
-${headlineTexts}
-
-Return ONLY a JSON array of 4 strings (search queries), nothing else. Example format: ["query 1", "query 2", "query 3", "query 4"]`;
+          You are a music industry analyst. Based on these breaking news headlines, create exactly 4 SEO-friendly search queries that music producers and music tech enthusiasts would search for. These queries should:
+          - Focus on actionable music industry topics
+          - Be relevant to music production, technology, business, or artist news
+          - Be suitable for semantic SEO blog posts
+          - Be 2-5 words long
+          - Reflect the actual news stories
+          
+          Headlines:
+          ${headlineTexts}
+          
+          Return ONLY a JSON array of 4 strings (search queries), nothing else. Example format: ["query 1", "query 2", "query 3", "query 4"]`;
               
               const result = await model.generateContent(prompt);
               const text = await result.response.text();
               
-              // Try to parse JSON array
               const match = text.match(/\[.*\]/s);
               if (match) {
                 const queries = JSON.parse(match[0]);
@@ -193,16 +181,13 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
             }
           }
           
-          // ──────────────────────────────────────────────────────────────
-          //  UPDATED: Generate daily queries (async, uses music news)
-          // ──────────────────────────────────────────────────────────────
           async function generateDailyQueries() {
             const now = new Date();
             const dayOfWeek = now.getDay();
             const dayOfMonth = now.getDate();
             const month = now.getMonth();
             const year = now.getFullYear();
-
+          
             let queries = await fetchTrendingMusicTopics();
             
             if (!queries || queries.length < 4) {
@@ -272,13 +257,13 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
                 trendingQueries[(dayIndex + month) % trendingQueries.length]
               ];
             }
-
+          
             const theme = `Music Industry News: ${queries[0]}`;
-
+          
             console.log(`\n📅 Date: ${now.toISOString().split('T')[0]}`);
             console.log(`🎯 Theme: ${theme}`);
             console.log(`🔍 Generated queries:`, queries);
-
+          
             return {
               queries,
               theme,
@@ -291,7 +276,6 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
             };
           }
           
-          // Google AI Mode API - For AI-generated search results
           async function getGoogleAIModeData(query) {
             try {
               console.log(`🤖 Fetching Google AI Mode data for: ${query.slice(0, 40)}...`);
@@ -313,13 +297,10 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
             }
           }
           
-          // Google AI Overview API - For AI Overview blocks
-          // UPDATED: First fetches regular search to extract page_token, then calls overview endpoint
           async function getGoogleAIOverviewData(query) {
             try {
               console.log(`🧠 Fetching Google AI Overview data for: ${query.slice(0, 40)}...`);
               
-              // Step 1: Get regular search first to extract page_token
               console.log(`  → Step 1: Getting page_token from regular search...`);
               const searchUrl = `https://serpapi.com/search?q=${encodeURIComponent(query)}&num=10&api_key=${SERPAPI_KEY}`;
               const searchResponse = await fetch(searchUrl);
@@ -330,7 +311,6 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
                 return null;
               }
               
-              // Extract page_token from search results
               const pageToken = searchData.serpapi_pagination?.next_page_token;
               if (!pageToken) {
                 console.log(`⚠️  No page_token found in search results`);
@@ -339,7 +319,6 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
               
               console.log(`  → Step 2: Calling AI Overview endpoint with page_token...`);
               
-              // Step 2: Call AI Overview endpoint with page_token
               const aoUrl = `https://serpapi.com/search?engine=google_ai_overview&q=${encodeURIComponent(query)}&api_key=${SERPAPI_KEY}`;
               const response = await fetch(aoUrl);
               const data = await response.json();
@@ -357,7 +336,6 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
             }
           }
           
-          // Main SERP data function with AI APIs
           async function getEnhancedSerpData(query, context = {}) {
             try {
               console.log(`🔍 Fetching enhanced SERP data for: ${query}`);
@@ -456,7 +434,6 @@ Return ONLY a JSON array of 4 strings (search queries), nothing else. Example fo
             }
           }
           
-          // Regular SERP data function (unchanged but copied for completeness)
           async function getRegularSerpData(query, context = {}) {
             try {
               const tbsModifier = context.isNews ? 'qdr:d' : 'qdr:w';
