@@ -121,41 +121,89 @@ jobs:
                 throw new Error('No headlines returned');
               }
           
-              const musicTopics = await distillHeadlinesIntoQueries(headlines);
+              // Use Gemini to distill headlines into 2 general music news queries
+              const musicTopics = await distillHeadlinesIntoQueries(headlines, 2);
               
-              if (musicTopics && musicTopics.length >= 4) {
-                return musicTopics.slice(0, 4);
+              if (musicTopics && musicTopics.length >= 2) {
+                return musicTopics.slice(0, 2);
               }
               
-              if (!musicTopics || musicTopics.length < 4) {
-                const fallbackQueries = headlines.map(h => {
-                  const terms = h.title
-                    .replace(/[^a-zA-Z0-9 ]/g, '')
-                    .split(' ')
-                    .filter(word => word.length > 3);
-                  return terms.slice(0, 3).join(' ');
-                }).filter(q => q.length > 0);
-                
-                return [...new Set(fallbackQueries)].slice(0, 4);
-              }
+              const fallbackQueries = headlines.map(h => {
+                const terms = h.title
+                  .replace(/[^a-zA-Z0-9 ]/g, '')
+                  .split(' ')
+                  .filter(word => word.length > 3);
+                return terms.slice(0, 3).join(' ');
+              }).filter(q => q.length > 0);
               
-              return musicTopics.slice(0, 4);
+              return [...new Set(fallbackQueries)].slice(0, 2);
             } catch (error) {
               console.error('❌ Failed to fetch breaking music news:', error.message);
               return null;
             }
           }
           
-          async function distillHeadlinesIntoQueries(headlines) {
+          // ── NEW: Fetch 2 trending music hardware / equipment topics ──
+          async function fetchMusicHardwareTopics() {
+            try {
+              console.log('🎛️ Fetching music hardware & equipment news from Google News...');
+              
+              const newsUrl = `https://serpapi.com/search?engine=google_news&q=music+hardware+equipment+gear+synthesizer+audio&num=20&api_key=${SERPAPI_KEY}`;
+              const response = await fetch(newsUrl);
+              const data = await response.json();
+              
+              if (data.error || !data.news_results) {
+                throw new Error(data.error || 'No hardware news data');
+              }
+          
+              const headlines = data.news_results
+                .slice(0, 15)
+                .map(item => ({
+                  title: item.title,
+                  snippet: item.snippet,
+                  source: item.source
+                }))
+                .filter(h => h.title && h.title.length > 0);
+              
+              console.log(`Found ${headlines.length} music hardware news headlines.`);
+          
+              if (headlines.length === 0) {
+                throw new Error('No hardware headlines returned');
+              }
+          
+              // Use Gemini to distill headlines into 2 hardware-focused queries
+              const hardwareTopics = await distillHeadlinesIntoQueries(headlines, 2, 'music hardware, instruments, synthesizers, audio equipment, music gear, studio equipment');
+              
+              if (hardwareTopics && hardwareTopics.length >= 2) {
+                return hardwareTopics.slice(0, 2);
+              }
+              
+              // Fallback: extract keywords directly
+              const fallbackQueries = headlines.map(h => {
+                const terms = h.title
+                  .replace(/[^a-zA-Z0-9 ]/g, '')
+                  .split(' ')
+                  .filter(word => word.length > 3);
+                return terms.slice(0, 3).join(' ');
+              }).filter(q => q.length > 0);
+              
+              return [...new Set(fallbackQueries)].slice(0, 2);
+            } catch (error) {
+              console.error('❌ Failed to fetch music hardware news:', error.message);
+              return null;
+            }
+          }
+          
+          // count – how many queries to return; focus – topic hint for Gemini
+          async function distillHeadlinesIntoQueries(headlines, count = 2, focus = 'music production, technology, business, or artist news') {
             try {
               const headlineTexts = headlines
                 .map((h, i) => `${i+1}. [${h.source}] ${h.title}${h.snippet ? ': ' + h.snippet.substring(0, 100) : ''}`)
                 .join('\n');
               
               const prompt = `
-          You are a music industry analyst. Based on these breaking news headlines, create exactly 4 SEO-friendly search queries that music producers and music tech enthusiasts would search for. These queries should:
-          - Focus on actionable music industry topics
-          - Be relevant to music production, technology, business, or artist news
+          You are a music industry analyst. Based on these breaking news headlines, create exactly ${count} SEO-friendly search queries focused on: ${focus}. These queries should:
+          - Be relevant to the specified focus area
           - Be suitable for semantic SEO blog posts
           - Be 2-5 words long
           - Reflect the actual news stories
@@ -163,7 +211,7 @@ jobs:
           Headlines:
           ${headlineTexts}
           
-          Return ONLY a JSON array of 4 strings (search queries), nothing else. Example format: ["query 1", "query 2", "query 3", "query 4"]`;
+          Return ONLY a JSON array of ${count} strings (search queries), nothing else. Example format: ["query 1", "query 2"]`;
               
               const result = await model.generateContent(prompt);
               const text = await result.response.text();
@@ -171,7 +219,7 @@ jobs:
               const match = text.match(/\[.*\]/s);
               if (match) {
                 const queries = JSON.parse(match[0]);
-                console.log('✅ Distilled headlines into queries:', queries);
+                console.log(`✅ Distilled ${count} queries:`, queries);
                 return Array.isArray(queries) ? queries : [];
               }
               return [];
@@ -188,43 +236,20 @@ jobs:
             const month = now.getMonth();
             const year = now.getFullYear();
           
-            let queries = await fetchTrendingMusicTopics();
+            // ── Slot 1 & 2: general music news (2 topics) ──
+            let newsQueries = await fetchTrendingMusicTopics();
             
-            if (!queries || queries.length < 4) {
-              console.log('Using static fallback queries (music news focused)');
-              const monthlyThemes = [
-                'AI Music Production Tools News',
-                'Music Gear Releases',
-                'Music Industry News',
-                'Audio Technology Updates',
-                'Music Business Trends',
-                'Creative Production Techniques'
-              ];
-              const theme = monthlyThemes[month % monthlyThemes.length];
-              
-              const aiToolsQueries = [
-                `latest AI music industry news ${month + 1}/${year}`,
-                `AI music production software news ${year}`,
-                `best AI plugins for producers reviews ${month + 1}/${year}`,
-                `AI mastering tools news ${year}`,
-                `artificial intelligence in music production news`,
-                `AI vocal processing updates ${month + 1} ${year}`,
-                `machine learning music composition news`,
-                `AI beat making tools reviews ${year}`
-              ];
-              
-              const gearQueries = [
-                `new music production gear releases ${month + 1}/${year}`,
-                `audio interface news ${year}`,
-                `studio monitor reviews ${month + 1} ${year}`,
-                `MIDI controller latest models ${year}`,
-                `synthesizer new releases ${month + 1}/${year}`,
-                `microphones for home studio news ${year}`,
-                `DAW updates ${month + 1} ${year}`,
-                `music production hardware news ${year}`
-              ];
-              
-              const newsQueries = [
+            // ── Slot 3 & 4: music hardware / equipment (2 topics) ──
+            let hardwareQueries = await fetchMusicHardwareTopics();
+          
+            // Fallback static pools if live fetches fail
+            const dayIndex = dayOfMonth % 8;
+            const weekIndex = Math.floor(dayOfMonth / 7) % 8;
+            const dayOfWeekIndex = dayOfWeek;
+          
+            if (!newsQueries || newsQueries.length < 2) {
+              console.log('Using static fallback queries for general music news');
+              const staticNewsPool = [
                 `music industry news ${month + 1}/${year}`,
                 `streaming services updates ${year}`,
                 `music copyright laws news ${month + 1} ${year}`,
@@ -232,37 +257,47 @@ jobs:
                 `music marketing strategies news ${month + 1}/${year}`,
                 `independent musician news ${year}`,
                 `record label developments ${month + 1} ${year}`,
-                `music distribution platforms news ${year}`
+                `music distribution platforms news ${year}`,
+                `AI music production software news ${year}`,
+                `machine learning music composition news`
               ];
-              
-              const trendingQueries = [
-                `viral music production trends ${month + 1}/${year}`,
-                `what producers are talking about ${year}`,
-                `emerging music technologies ${month + 1} ${year}`,
-                `music production on social media news ${year}`,
-                `creative workflows ${month + 1}/${year}`,
-                `music collaboration tools news ${year}`,
-                `home studio setup trends ${month + 1} ${year}`,
-                `music education online news ${year}`
-              ];
-              
-              const dayIndex = dayOfMonth % 8;
-              const weekIndex = Math.floor(dayOfMonth / 7) % 8;
-              const dayOfWeekIndex = dayOfWeek;
-              
-              queries = [
-                aiToolsQueries[(dayIndex + dayOfWeekIndex) % aiToolsQueries.length],
-                gearQueries[(dayIndex + weekIndex) % gearQueries.length],
-                newsQueries[(dayOfMonth + dayOfWeekIndex) % newsQueries.length],
-                trendingQueries[(dayIndex + month) % trendingQueries.length]
+              newsQueries = [
+                staticNewsPool[(dayIndex + dayOfWeekIndex) % staticNewsPool.length],
+                staticNewsPool[(dayIndex + dayOfWeekIndex + 3) % staticNewsPool.length]
               ];
             }
+          
+            if (!hardwareQueries || hardwareQueries.length < 2) {
+              console.log('Using static fallback queries for music hardware');
+              const staticHardwarePool = [
+                `new music production gear releases ${month + 1}/${year}`,
+                `audio interface news ${year}`,
+                `studio monitor reviews ${month + 1} ${year}`,
+                `MIDI controller latest models ${year}`,
+                `synthesizer new releases ${month + 1}/${year}`,
+                `microphones for home studio news ${year}`,
+                `DAW updates ${month + 1} ${year}`,
+                `music production hardware news ${year}`,
+                `best audio equipment ${year}`,
+                `music instruments technology ${month + 1} ${year}`
+              ];
+              hardwareQueries = [
+                staticHardwarePool[(dayIndex + weekIndex) % staticHardwarePool.length],
+                staticHardwarePool[(dayIndex + weekIndex + 4) % staticHardwarePool.length]
+              ];
+            }
+          
+            // Merge: 2 general news + 2 hardware = 4 total
+            const queries = [
+              ...newsQueries.slice(0, 2),
+              ...hardwareQueries.slice(0, 2)
+            ];
           
             const theme = `Music Industry News: ${queries[0]}`;
           
             console.log(`\n📅 Date: ${now.toISOString().split('T')[0]}`);
             console.log(`🎯 Theme: ${theme}`);
-            console.log(`🔍 Generated queries:`, queries);
+            console.log(`🔍 Generated queries (2 news + 2 hardware):`, queries);
           
             return {
               queries,
